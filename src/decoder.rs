@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 
+use crate::lm::{LMStateRef, LM};
+
 #[derive(Clone, Debug, PartialEq)]
 struct DecoderState {
     score: f32,
@@ -8,10 +10,17 @@ struct DecoderState {
     am_score: f32,
     lm_score: f32,
     parent_index: isize,
+    lm_state: LMStateRef,
 }
 
 impl DecoderState {
+    /// Compare two states by their internal conditions ignoring the scores.
+    /// This is used to sort states so that the same states will be consecutive.
     fn cmp_without_score(&self, other: &DecoderState) -> Ordering {
+        let lm_cmp = self.lm_state.partial_cmp(&other.lm_state).unwrap();
+        if lm_cmp != Ordering::Equal {
+            return lm_cmp
+        }
         if self.token != other.token {
             self.token.cmp(&other.token)
         } else if self.prev_blank != other.prev_blank {
@@ -60,9 +69,11 @@ pub struct DecoderOptions {
     pub beam_size_token: usize,
     /// the decoder will ignore paths whose score is more than this value lower than the best score.
     pub beam_threshold: f32,
+    /// weight of the language model score.
+    pub lm_weight: f32,
 }
 
-pub struct Decoder {
+pub struct Decoder<T: LM> {
     options: DecoderOptions,
     /// All the new candidates that proposed based on the previous step.
     current_candidates: Vec<DecoderState>,
@@ -72,10 +83,12 @@ pub struct Decoder {
     blank: i32,
     /// hypothesis for each time step.
     hypothesis: Vec<Vec<DecoderState>>,
+    /// The language model.
+    lm: T,
 }
 
-impl Decoder {
-    pub fn new(options: DecoderOptions, blank: i32) -> Self {
+impl<T: LM> Decoder<T> {
+    pub fn new(options: DecoderOptions, blank: i32, lm: T) -> Self {
         Self {
             options,
             current_candidates: Vec::new(),
@@ -83,6 +96,7 @@ impl Decoder {
             current_candidate_pointers: Vec::new(),
             blank,
             hypothesis: Vec::new(),
+            lm,
         }
     }
 
@@ -95,7 +109,7 @@ impl Decoder {
 
     fn decode_begin(&mut self) {
         self.reset_candidate();
-        // TODO: Compute the LM initial score.
+        let initial_state = self.lm.start();
         self.hypothesis.clear();
         self.hypothesis.push(Vec::new());
         self.hypothesis[0].push(DecoderState {
@@ -104,7 +118,8 @@ impl Decoder {
             prev_blank: false,
             am_score: 0.0,
             lm_score: 0.0,
-            parent_index: -1 /* ROOT */,
+            parent_index: -1, /* ROOT */
+            lm_state: initial_state,
         });
     }
 
@@ -129,6 +144,7 @@ impl Decoder {
             self.reset_candidate();
             for (prev_hyp_idx, prev_hyp) in self.hypothesis[t].iter().enumerate() {
                 let prev_token = prev_hyp.token;
+                let prev_lm_state = &prev_hyp.lm_state;
                 for &target in target_index.iter().take(self.options.beam_size_token) {
                     let token = target as i32;
                     let am_score = data[t * tokens + target];
@@ -136,18 +152,20 @@ impl Decoder {
 
                     if token != self.blank && (token != prev_token || prev_hyp.prev_blank) {
                         // New token
+                        let (lm_state, lm_score) = self.lm.score(prev_lm_state, token);
                         // TODO: Compute LM Score.
                         add_candidate(
                             &mut self.current_candidates,
                             &mut self.current_best_score,
                             self.options.beam_threshold,
                             DecoderState {
-                                score,
+                                score: score + self.options.lm_weight * lm_score,
                                 token,
                                 prev_blank: false,
                                 am_score: prev_hyp.am_score + am_score,
-                                lm_score: 0.0,
+                                lm_score: prev_hyp.lm_score + lm_score,
                                 parent_index: prev_hyp_idx as isize,
+                                lm_state,
                             },
                         );
                     } else if token == self.blank {
@@ -161,8 +179,9 @@ impl Decoder {
                                 token,
                                 prev_blank: true,
                                 am_score: prev_hyp.am_score + am_score,
-                                lm_score: 0.0,
+                                lm_score: prev_hyp.lm_score,
                                 parent_index: prev_hyp_idx as isize,
+                                lm_state: prev_lm_state.clone(),
                             },
                         );
                     } else {
@@ -176,8 +195,9 @@ impl Decoder {
                                 token,
                                 prev_blank: false,
                                 am_score: prev_hyp.am_score + am_score,
-                                lm_score: 0.0,
+                                lm_score: prev_hyp.lm_score,
                                 parent_index: prev_hyp_idx as isize,
+                                lm_state: prev_lm_state.clone(),
                             },
                         );
                     }
@@ -188,7 +208,7 @@ impl Decoder {
         }
     }
 
-    fn decode_end(&mut self)  {
+    fn decode_end(&mut self) {
         // TODO: Compute LM Score.
     }
 
@@ -219,52 +239,72 @@ impl Decoder {
         let mut last_ptr = self.current_candidate_pointers[0];
         for i in 1..self.current_candidate_pointers.len() {
             let ptr = self.current_candidate_pointers[i];
-            if self.current_candidates[ptr].cmp_without_score(&self.current_candidates[last_ptr]) != Ordering::Equal{
+            if self.current_candidates[ptr].cmp_without_score(&self.current_candidates[last_ptr])
+                != Ordering::Equal
+            {
                 // Distinct pattern.
                 self.current_candidate_pointers[n_candidates_after_merged] = ptr;
                 n_candidates_after_merged += 1;
                 last_ptr = ptr;
             } else {
                 // Same pattern.
-                let max_score = self.current_candidates[last_ptr].score.max(self.current_candidates[ptr].score);
-                let min_score = self.current_candidates[last_ptr].score.min(self.current_candidates[ptr].score);
-                self.current_candidates[last_ptr].score = max_score + libm::log1p(libm::exp(min_score as f64 - max_score as f64)) as f32;
+                let max_score = self.current_candidates[last_ptr]
+                    .score
+                    .max(self.current_candidates[ptr].score);
+                let min_score = self.current_candidates[last_ptr]
+                    .score
+                    .min(self.current_candidates[ptr].score);
+                self.current_candidates[last_ptr].score =
+                    max_score + libm::log1p(libm::exp(min_score as f64 - max_score as f64)) as f32;
             }
         }
-        self.current_candidate_pointers.truncate(n_candidates_after_merged);
+        self.current_candidate_pointers
+            .truncate(n_candidates_after_merged);
 
         // 3. Sort candidates.
         if self.current_candidate_pointers.len() > self.options.beam_size {
-            pdqselect::select_by(&mut self.current_candidate_pointers, self.options.beam_size, |&a, &b| {
-                self.current_candidates[a].cmp_by_score(&self.current_candidates[b]).reverse()
-            });
+            pdqselect::select_by(
+                &mut self.current_candidate_pointers,
+                self.options.beam_size,
+                |&a, &b| {
+                    self.current_candidates[a]
+                        .cmp_by_score(&self.current_candidates[b])
+                        .reverse()
+                },
+            );
         }
 
         // 4. Copy candidates to output.
         let output = &mut self.hypothesis[t + 1];
         output.clear();
-        for &ptr in self.current_candidate_pointers.iter().take(self.options.beam_size) {
+        for &ptr in self
+            .current_candidate_pointers
+            .iter()
+            .take(self.options.beam_size)
+        {
             output.push(self.current_candidates[ptr].clone());
         }
     }
 
     fn get_all_hypothesis(&self, final_step: usize) -> Vec<DecoderOutput> {
-        println!("{:?}", self.hypothesis);
-        self.hypothesis[final_step].iter().map(|hyp| {
-            let mut output = DecoderOutput::reserved(final_step);
-            output.score = hyp.score;
-            output.am_score = hyp.am_score;
-            output.lm_score = hyp.lm_score;
-            let mut hyp_ = hyp;
-            for i in (0..final_step).rev() {
-                output.tokens[i] = hyp_.token;
-                if hyp_.parent_index == -1 {
-                    break;
+        self.hypothesis[final_step]
+            .iter()
+            .map(|hyp| {
+                let mut output = DecoderOutput::reserved(final_step);
+                output.score = hyp.score;
+                output.am_score = hyp.am_score;
+                output.lm_score = hyp.lm_score;
+                let mut hyp_ = hyp;
+                for i in (0..final_step).rev() {
+                    output.tokens[i] = hyp_.token;
+                    if hyp_.parent_index == -1 {
+                        break;
+                    }
+                    hyp_ = &self.hypothesis[i][hyp_.parent_index as usize];
                 }
-                hyp_ = &self.hypothesis[i][hyp_.parent_index as usize];
-            }
-            output
-        }).collect()
+                output
+            })
+            .collect()
     }
 }
 
@@ -284,24 +324,35 @@ fn add_candidate(
 
 #[cfg(test)]
 mod tests {
-    use crate::{DecoderOptions, Decoder};
+    use crate::{lm::ZeroLM, Decoder, DecoderOptions, DecoderOutput};
 
     #[test]
     fn it_works() {
-        let options  = DecoderOptions {
+        let options = DecoderOptions {
             beam_size: 1,
             beam_size_token: 10,
             beam_threshold: f32::MAX,
+            lm_weight: 0.0,
         };
-        let mut decoder = Decoder::new(options, 4);
+        let mut decoder = Decoder::new(options, 4, ZeroLM);
         let steps = 3;
         let tokens = 4;
+        #[rustfmt::skip]
         let data = &[
             1.0, 0.0, 0.0, 0.0,
             1.0, 0.0, 0.0, 0.0,
             0.0, 2.0, 0.0, 0.0,
         ];
         let outputs = decoder.decode(data, steps, tokens);
-        assert_eq!(outputs, Vec::new());
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(
+            outputs[0],
+            DecoderOutput {
+                score: 4.0,
+                am_score: 4.0,
+                lm_score: 0.0,
+                tokens: vec![0, 0, 1],
+            }
+        )
     }
 }

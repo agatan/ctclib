@@ -36,8 +36,8 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings.");
-    println!("cargo:rerun-if-changed=wrapper.c");
-    cc::Build::new().cpp(true).file("wrapper.c").compile("wrapper");
+    println!("cargo:rerun-if-changed=wrapper.cpp");
+    cc::Build::new().cpp(true).file("wrapper.cpp").compile("wrapper");
 
     // link to appropriate C++ lib
     if target.contains("apple") {

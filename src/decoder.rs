@@ -293,6 +293,7 @@ impl<T: LM> Decoder<T> {
         }
         self.current_candidate_pointers
             .truncate(n_candidates_after_merged);
+        self.current_candidate_pointers.shrink_to_fit();
 
         // 3. Sort candidates.
         if self.current_candidate_pointers.len() > self.options.beam_size {

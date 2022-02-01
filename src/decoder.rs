@@ -19,7 +19,7 @@ impl DecoderState {
     fn cmp_without_score(&self, other: &DecoderState) -> Ordering {
         let lm_cmp = self.lm_state.partial_cmp(&other.lm_state).unwrap();
         if lm_cmp != Ordering::Equal {
-            return lm_cmp
+            return lm_cmp;
         }
         if self.token != other.token {
             self.token.cmp(&other.token)
@@ -46,10 +46,10 @@ impl DecoderState {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DecoderOutput {
-    score: f32,
-    am_score: f32,
-    lm_score: f32,
-    tokens: Vec<i32>,
+    pub score: f32,
+    pub am_score: f32,
+    pub lm_score: f32,
+    pub tokens: Vec<i32>,
 }
 
 impl DecoderOutput {
@@ -60,6 +60,19 @@ impl DecoderOutput {
             lm_score: 0.0,
             tokens: vec![0; len],
         }
+    }
+
+    /// Returns the token sequence where blank and consecutive tokens have been resolved.
+    pub fn reduced_tokens(&self, blank: i32) -> Vec<i32> {
+        let mut output = Vec::new();
+        let mut last_token = blank;
+        for &tok in self.tokens.iter() {
+            if last_token != tok && tok != blank {
+                output.push(tok);
+            }
+            last_token = tok;
+        }
+        output
     }
 }
 
@@ -103,8 +116,10 @@ impl<T: LM> Decoder<T> {
     pub fn decode(&mut self, data: &[f32], steps: usize, tokens: usize) -> Vec<DecoderOutput> {
         self.decode_begin();
         self.decode_step(data, steps, tokens);
-        self.decode_end();
-        self.get_all_hypothesis(steps)
+        self.decode_end(steps);
+        let mut outputs = self.get_all_hypothesis(steps);
+        outputs.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap().reverse());
+        outputs
     }
 
     fn decode_begin(&mut self) {
@@ -153,7 +168,6 @@ impl<T: LM> Decoder<T> {
                     if token != self.blank && (token != prev_token || prev_hyp.prev_blank) {
                         // New token
                         let (lm_state, lm_score) = self.lm.score(prev_lm_state, token);
-                        // TODO: Compute LM Score.
                         add_candidate(
                             &mut self.current_candidates,
                             &mut self.current_best_score,
@@ -208,8 +222,27 @@ impl<T: LM> Decoder<T> {
         }
     }
 
-    fn decode_end(&mut self) {
-        // TODO: Compute LM Score.
+    fn decode_end(&mut self, steps: usize) {
+        self.reset_candidate();
+        for (prev_hyp_idx, prev_hyp) in self.hypothesis[steps].iter().enumerate() {
+            let prev_lm_state = &prev_hyp.lm_state;
+            let (lm_state, lm_score) = self.lm.finish(prev_lm_state);
+            add_candidate(
+                &mut self.current_candidates,
+                &mut self.current_best_score,
+                self.options.beam_threshold,
+                DecoderState {
+                    score: prev_hyp.score + self.options.lm_weight * lm_score,
+                    token: self.blank,
+                    prev_blank: false,
+                    am_score: prev_hyp.am_score,
+                    lm_score: prev_hyp.lm_score + lm_score,
+                    parent_index: prev_hyp_idx as isize,
+                    lm_state,
+                },
+            );
+        }
+        self.finalize_candidate(steps);
     }
 
     fn reset_candidate(&mut self) {
@@ -287,20 +320,20 @@ impl<T: LM> Decoder<T> {
     }
 
     fn get_all_hypothesis(&self, final_step: usize) -> Vec<DecoderOutput> {
-        self.hypothesis[final_step]
+        self.hypothesis[final_step + 1]
             .iter()
             .map(|hyp| {
-                let mut output = DecoderOutput::reserved(final_step);
+                let mut output = DecoderOutput::reserved(final_step + 1);
                 output.score = hyp.score;
                 output.am_score = hyp.am_score;
                 output.lm_score = hyp.lm_score;
                 let mut hyp_ = hyp;
-                for i in (0..final_step).rev() {
+                for i in (0..final_step + 1).rev() {
                     output.tokens[i] = hyp_.token;
+                    hyp_ = &self.hypothesis[i][hyp_.parent_index as usize];
                     if hyp_.parent_index == -1 {
                         break;
                     }
-                    hyp_ = &self.hypothesis[i][hyp_.parent_index as usize];
                 }
                 output
             })

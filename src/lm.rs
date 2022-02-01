@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
 #[derive(Debug, Default)]
 struct LMState {
@@ -7,13 +7,13 @@ struct LMState {
 
 /// A reference to a LM state.
 /// LMStateRef holds the information of the token sequence being decoded, and the identity of the token sequence can be confirmed by comparing LMStateRef.
-#[derive(Debug, Clone)]
+#[derive(Clone, Default)]
 pub struct LMStateRef(Rc<RefCell<LMState>>);
 
 impl LMStateRef {
     /// Create a root LMStateRef.
     pub fn new() -> Self {
-        Self(Default::default())
+        Self::default()
     }
 
     /// Create a LMStateRef with a given LMState and a token.
@@ -23,6 +23,12 @@ impl LMStateRef {
         let mut state = self.0.borrow_mut();
         let child = state.children.entry(token).or_insert_with(LMStateRef::new);
         child.clone()
+    }
+}
+
+impl Debug for LMStateRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:p}", self.0.as_ptr())
     }
 }
 

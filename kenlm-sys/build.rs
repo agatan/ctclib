@@ -27,17 +27,21 @@ fn main() {
         .opaque_type("lm::base::Model")
         .allowlist_type("lm::ngram::State")
         .opaque_type("lm::ngram::State")
+        .allowlist_type("lm::base::Vocabulary")
+        .opaque_type("lm::base::Vocabulary")
+        .opaque_type("lm::ngram::State")
         .allowlist_type("lm::ngram::Config")
         .opaque_type("std::.*")
-        .generate_inline_functions(true)
         .allowlist_function("lm_ngram_LoadVirtual.*")
+        .allowlist_function("lm_base_Vocabulary_.*")
+        .allowlist_function("lm_base_Model_.*")
         .generate()
         .expect("Unable to generate bindings");
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings.");
     println!("cargo:rerun-if-changed=wrapper.cpp");
-    cc::Build::new().cpp(true).file("wrapper.cpp").compile("wrapper");
+    cc::Build::new().cpp(true).file("wrapper.cpp").flag("-fkeep-inline-functions").compile("wrapper");
 
     // link to appropriate C++ lib
     if target.contains("apple") {

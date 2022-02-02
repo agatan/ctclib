@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 libm = "0.2.1"
 pdqselect = "0.1.1"
+kenlm-sys = { path = "kenlm-sys" }

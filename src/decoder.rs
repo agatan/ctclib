@@ -1,22 +1,22 @@
 use std::cmp::Ordering;
 
-use crate::lm::{LMStateRef, LM, LMState};
+use crate::lm::{LMStateRef, LM};
 
 #[derive(Clone, Debug, PartialEq)]
-struct DecoderState<State: LMState> {
+struct DecoderState {
     score: f32,
     token: i32,
     prev_blank: bool,
     am_score: f32,
     lm_score: f32,
     parent_index: isize,
-    lm_state: State,
+    lm_state: LMStateRef,
 }
 
-impl <State : LMState> DecoderState<State> {
+impl DecoderState {
     /// Compare two states by their internal conditions ignoring the scores.
     /// This is used to sort states so that the same states will be consecutive.
-    fn cmp_without_score(&self, other: &DecoderState<State>) -> Ordering {
+    fn cmp_without_score(&self, other: &DecoderState) -> Ordering {
         let lm_cmp = self.lm_state.partial_cmp(&other.lm_state).unwrap();
         if lm_cmp != Ordering::Equal {
             return lm_cmp;
@@ -30,7 +30,7 @@ impl <State : LMState> DecoderState<State> {
         }
     }
 
-    fn cmp_without_score_then_score(&self, other: &DecoderState<State>) -> Ordering {
+    fn cmp_without_score_then_score(&self, other: &DecoderState) -> Ordering {
         let without_score = self.cmp_without_score(other);
         if without_score != Ordering::Equal {
             without_score
@@ -39,7 +39,7 @@ impl <State : LMState> DecoderState<State> {
         }
     }
 
-    fn cmp_by_score(&self, other: &DecoderState<State>) -> Ordering {
+    fn cmp_by_score(&self, other: &DecoderState) -> Ordering {
         self.score.partial_cmp(&other.score).unwrap()
     }
 }
@@ -89,13 +89,13 @@ pub struct DecoderOptions {
 pub struct Decoder<T: LM> {
     options: DecoderOptions,
     /// All the new candidates that proposed based on the previous step.
-    current_candidates: Vec<DecoderState<T::State>>,
+    current_candidates: Vec<DecoderState>,
     current_best_score: f32,
     current_candidate_pointers: Vec<usize>,
     /// blank_index is the index of the blank token.
     blank: i32,
     /// hypothesis for each time step.
-    hypothesis: Vec<Vec<DecoderState<T::State>>>,
+    hypothesis: Vec<Vec<DecoderState>>,
     /// The language model.
     lm: T,
 }
@@ -342,11 +342,11 @@ impl<T: LM> Decoder<T> {
     }
 }
 
-fn add_candidate<T: LMState>(
-    output: &mut Vec<DecoderState<T>>,
+fn add_candidate(
+    output: &mut Vec<DecoderState>,
     current_best_score: &mut f32,
     beam_threshold: f32,
-    state: DecoderState<T>,
+    state: DecoderState,
 ) {
     if state.score > *current_best_score {
         *current_best_score = state.score;
@@ -385,7 +385,7 @@ mod tests {
                 score: 4.0,
                 am_score: 4.0,
                 lm_score: 0.0,
-                tokens: vec![0, 0, 1],
+                tokens: vec![0, 0, 1, 4],
             }
         )
     }

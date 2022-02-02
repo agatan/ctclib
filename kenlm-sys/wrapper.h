@@ -8,8 +8,18 @@
 #include "kenlm/lm/config.hh"
 #include "kenlm/lm/model.hh"
 
-extern "C" {
-	lm::base::Model *lm_ngram_LoadVirtual(const char *filename, const lm::ngram::Config *config);
+// bindgen does not generate inline functions, so we need to define them here.
+extern "C"
+{
+    lm::base::Model *lm_ngram_LoadVirtual(const char *filename, const lm::ngram::Config *config);
 
-	lm::base::Model *lm_ngram_LoadVirtualWithDefaultConfig(const char *filename);
+    lm::base::Model *lm_ngram_LoadVirtualWithDefaultConfig(const char *filename);
+
+    lm::WordIndex lm_base_Vocabulary_EndSentence(const lm::base::Vocabulary *vocab);
+
+    float lm_base_Model_BaseScore(lm::base::Model *model, const void *instate, lm::WordIndex new_word, void *outstate);
+
+    const lm::base::Vocabulary *lm_base_Model_BaseVocabulary(lm::base::Model *model);
+
+    void lm_base_Model_NullContextWrite(lm::base::Model *model, void *outstate);
 }

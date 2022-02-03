@@ -116,7 +116,7 @@ fn load_model_and_get_vocab() {
 /// A wrapper of a KenLM for decoding.
 pub struct KenLM {
     model: Model,
-    idx_to_kenlm_idx: HashMap<i32, kenlm_sys::lm_WordIndex>,
+    idx_to_kenlm_idx: Vec<KenLMWordIndex>,
 }
 
 impl KenLM {
@@ -125,13 +125,12 @@ impl KenLM {
         let model = Model::new(path);
         let vocab = model.vocab();
 
-        let idx_to_kenlm_idx = dict
-            .iter()
-            .map(|(word, idx)| {
-                let kenlm_idx = vocab.index(word);
-                (*idx, kenlm_idx)
-            })
-            .collect::<HashMap<_, _>>();
+        let mut idx_to_kenlm_idx = vec![0 as KenLMWordIndex; dict.len()];
+
+        for (word, &idx) in dict.iter() {
+            let kenlm_idx = vocab.index(word);
+            idx_to_kenlm_idx[idx as usize] = kenlm_idx;
+        }
 
         Self {
             model,
@@ -153,7 +152,7 @@ impl LM for KenLM {
         state: &LMStateRef<Self::State>,
         token: i32,
     ) -> (LMStateRef<Self::State>, f32) {
-        let kenlm_idx = self.idx_to_kenlm_idx[&token];
+        let kenlm_idx = self.idx_to_kenlm_idx[token as usize];
         let (next_kenlm_state, score) = {
             self.model
                 .base_score(&state.borrow_internal_state(), kenlm_idx)

@@ -1,4 +1,4 @@
-use ctclib::{Decoder, DecoderOptions, KenLM, LM};
+use ctclib::{KenLM, LM};
 
 #[test]
 fn kenlm_model_works() {

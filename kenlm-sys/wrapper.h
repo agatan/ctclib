@@ -12,14 +12,14 @@
 extern "C"
 {
     lm::base::Model *lm_ngram_LoadVirtual(const char *filename, const lm::ngram::Config *config);
-
     lm::base::Model *lm_ngram_LoadVirtualWithDefaultConfig(const char *filename);
 
+    lm::WordIndex lm_base_Vocabulary_BeginSentence(const lm::base::Vocabulary *vocab);
     lm::WordIndex lm_base_Vocabulary_EndSentence(const lm::base::Vocabulary *vocab);
+    lm::WordIndex lm_base_Vocabulary_Index(const lm::base::Vocabulary *vocab, const char* str, size_t len);
 
     float lm_base_Model_BaseScore(lm::base::Model *model, const void *instate, lm::WordIndex new_word, void *outstate);
-
     const lm::base::Vocabulary *lm_base_Model_BaseVocabulary(lm::base::Model *model);
-
     void lm_base_Model_NullContextWrite(lm::base::Model *model, void *outstate);
+    void lm_base_Model_delete(lm::base::Model *model);
 }

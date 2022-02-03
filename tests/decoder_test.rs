@@ -1,6 +1,6 @@
 use std::io::BufRead;
 
-use ctclib::{Decoder, DecoderOptions, ZeroLM};
+use ctclib::{Decoder, DecoderOptions, KenLM, ZeroLM};
 
 fn load_logits() -> (usize, usize, Vec<f32>) {
     let file = std::io::BufReader::new(std::fs::File::open("data/logit.txt").unwrap());
@@ -65,6 +65,32 @@ fn beam_search_decoder_decodes_sequence() {
         },
         blank,
         ZeroLM,
+    );
+    let outputs = decoder.decode(&data, steps, n_vocab);
+    let output = &outputs[0];
+    let tokens = output.reduced_tokens(blank);
+    let text = tokens
+        .into_iter()
+        .map(|i| vocab[i as usize].as_str())
+        .collect::<Vec<&str>>()
+        .join("");
+    assert_eq!(text, "MISTE|QUILTER|T|IS|TH|E|APOSTLES|OF|THE|RIDDLE|CLASHES|AND|WEHARE|GOLADB|TO|WELCOME|HIS|GOSPEL|N|");
+}
+
+#[test]
+fn beam_search_decoder_decodes_sequence_with_kenlm() {
+    let (steps, n_vocab, data) = load_logits();
+    let vocab = load_letter_dicts();
+    let blank = vocab.iter().position(|x| x == "<pad>").unwrap() as i32;
+    let mut decoder = Decoder::new(
+        DecoderOptions {
+            beam_size: 100,
+            beam_size_token: 2000000,
+            beam_threshold: f32::MAX,
+            lm_weight: 0.5,
+        },
+        blank,
+        KenLM::new("data/overfit.arpa"),
     );
     let outputs = decoder.decode(&data, steps, n_vocab);
     let output = &outputs[0];

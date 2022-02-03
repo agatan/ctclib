@@ -41,6 +41,7 @@ fn main() {
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings.");
     println!("cargo:rerun-if-changed=wrapper.cpp");
+    println!("cargo:rerun-if-changed=wrapper.h");
     cc::Build::new().cpp(true).file("wrapper.cpp").flag("-fkeep-inline-functions").compile("wrapper");
 
     // link to appropriate C++ lib

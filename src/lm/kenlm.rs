@@ -99,7 +99,6 @@ impl<'a> Vocabulary<'a> {
 fn load_model_and_get_vocab() {
     let model = Model::new("data/overfit.arpa");
     let vocab = model.vocab();
-    assert_eq!(vocab.begin_sentence(), 1);
     assert_eq!(vocab.end_sentence(), 2);
     assert_eq!(vocab.index("M"), 3);
     assert_eq!(vocab.index("I"), 4);

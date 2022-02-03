@@ -7,18 +7,18 @@ use super::LM;
 pub type KenLMWordIndex = kenlm_sys::lm_WordIndex;
 
 #[derive(Debug, Clone)]
-struct KenLMState(kenlm_sys::lm_ngram_State);
+pub struct KenLMState(kenlm_sys::lm_ngram_State);
 
 impl KenLMState {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self(unsafe { std::mem::zeroed() })
     }
 
-    pub fn with_ptr<T: 'static>(&self, f: impl FnOnce(*const kenlm_sys::lm_ngram_State) -> T) -> T {
+    fn with_ptr<T: 'static>(&self, f: impl FnOnce(*const kenlm_sys::lm_ngram_State) -> T) -> T {
         f(&self.0 as *const _)
     }
 
-    pub fn with_mut_ptr<T: 'static>(
+    fn with_mut_ptr<T: 'static>(
         &mut self,
         f: impl FnOnce(*mut kenlm_sys::lm_ngram_State) -> T,
     ) -> T {
@@ -116,7 +116,6 @@ fn load_model_and_get_vocab() {
 /// A wrapper of a KenLM for decoding.
 pub struct KenLM {
     model: Model,
-    kenlm_states: HashMap<LMStateRef, KenLMState>,
     idx_to_kenlm_idx: HashMap<i32, kenlm_sys::lm_WordIndex>,
 }
 
@@ -136,39 +135,38 @@ impl KenLM {
 
         Self {
             model,
-            kenlm_states: HashMap::new(),
             idx_to_kenlm_idx,
         }
     }
 }
 
 impl LM for KenLM {
-    fn start(&mut self) -> LMStateRef {
-        let outstate = LMStateRef::new();
+    type State = KenLMState;
+
+    fn start(&mut self) -> LMStateRef<Self::State> {
         let initial_state = self.model.null_context();
-        self.kenlm_states.insert(outstate.clone(), initial_state);
-        outstate
+        LMStateRef::new(initial_state)
     }
 
-    fn score(&mut self, state: &LMStateRef, token: i32) -> (LMStateRef, f32) {
+    fn score(
+        &mut self,
+        state: &LMStateRef<Self::State>,
+        token: i32,
+    ) -> (LMStateRef<Self::State>, f32) {
         let kenlm_idx = self.idx_to_kenlm_idx[&token];
-        let outstate = state.child(token);
         let (next_kenlm_state, score) = {
-            let kenlm_state = &self.kenlm_states[state];
-            self.model.base_score(kenlm_state, kenlm_idx)
+            self.model
+                .base_score(&state.borrow_internal_state(), kenlm_idx)
         };
-        self.kenlm_states.insert(outstate.clone(), next_kenlm_state);
+        let outstate = state.child(token, next_kenlm_state);
         (outstate, score)
     }
 
-    fn finish(&mut self, state: &LMStateRef) -> (LMStateRef, f32) {
+    fn finish(&mut self, state: &LMStateRef<Self::State>) -> (LMStateRef<Self::State>, f32) {
         let eos = self.model.vocab().end_sentence();
-        let outstate = state.child(-1);
-        let (next_kenlm_state, score) = {
-            let kenlm_state = &self.kenlm_states[state];
-            self.model.base_score(kenlm_state, eos)
-        };
-        self.kenlm_states.insert(outstate.clone(), next_kenlm_state);
+        let (next_kenlm_state, score) =
+            { self.model.base_score(&state.borrow_internal_state(), eos) };
+        let outstate = state.child(-1, next_kenlm_state);
         (outstate, score)
     }
 }

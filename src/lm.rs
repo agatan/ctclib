@@ -1,59 +1,68 @@
 pub mod kenlm;
 pub use kenlm::KenLM;
 
-use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
+use std::{cell::{RefCell, Ref}, collections::HashMap, fmt::Debug, rc::Rc};
 
 #[derive(Debug, Default)]
-pub struct LMState {
-    children: HashMap<i32, LMStateRef>,
+pub struct LMState<T> {
+    children: HashMap<i32, LMStateRef<T>>,
+    state: T,
 }
 
 /// A reference to a LM state.
 /// LMStateRef holds the information of the token sequence being decoded, and the identity of the token sequence can be confirmed by comparing LMStateRef.
 #[derive(Default)]
-pub struct LMStateRef(Rc<RefCell<LMState>>);
+pub struct LMStateRef<T>(Rc<RefCell<LMState<T>>>);
 
-impl Clone for LMStateRef {
+impl<T> Clone for LMStateRef<T> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-impl std::hash::Hash for LMStateRef {
+impl<T> std::hash::Hash for LMStateRef<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0.as_ptr().hash(state)
     }
 }
 
-impl LMStateRef {
-    fn new() -> Self {
-        Self::default()
+impl<T> LMStateRef<T> {
+    fn new(state: T) -> Self {
+        Self(Rc::new(RefCell::new(LMState {
+            children: HashMap::new(),
+            state,
+        })))
     }
 
-    fn child(&self, token: i32) -> Self {
+    fn child(&self, token: i32, internal_state: T) -> Self {
         let mut state = self.0.borrow_mut();
         let child = state
             .children
             .entry(token)
-            .or_insert_with(LMStateRef::default);
+            .or_insert_with(|| LMStateRef::new(internal_state));
         child.clone()
+    }
+
+    fn borrow_internal_state<'a>(&'a self) -> Ref<'a, T> {
+        let r = self.0.borrow();
+        Ref::map(r, |s| &s.state)
     }
 }
 
-impl Debug for LMStateRef {
+impl<T> Debug for LMStateRef<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:p}", self.0.as_ptr())
     }
 }
 
-impl PartialEq for LMStateRef {
+impl<T> PartialEq for LMStateRef<T> {
     fn eq(&self, other: &Self) -> bool {
         self.0.as_ptr() == other.0.as_ptr()
     }
 }
-impl Eq for LMStateRef {}
+impl<T> Eq for LMStateRef<T> {}
 
-impl PartialOrd for LMStateRef {
+impl<T> PartialOrd for LMStateRef<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.0.as_ptr().partial_cmp(&other.0.as_ptr())
     }
@@ -61,12 +70,17 @@ impl PartialOrd for LMStateRef {
 
 /// LM is a wrapper of a language model for decoding.
 pub trait LM {
+    type State;
     /// Initializes the LM, then returns the root LMStateRef.
-    fn start(&mut self) -> LMStateRef;
+    fn start(&mut self) -> LMStateRef<Self::State>;
     // Returns the new state and the score when a token comes as a continuation of LMStateRef.
-    fn score(&mut self, state: &LMStateRef, token: i32) -> (LMStateRef, f32);
+    fn score(
+        &mut self,
+        state: &LMStateRef<Self::State>,
+        token: i32,
+    ) -> (LMStateRef<Self::State>, f32);
     // Returns the new state and the score of the final state.
-    fn finish(&mut self, state: &LMStateRef) -> (LMStateRef, f32);
+    fn finish(&mut self, state: &LMStateRef<Self::State>) -> (LMStateRef<Self::State>, f32);
 }
 
 /// ZeroLM is a language model that always returns 0.
@@ -75,15 +89,21 @@ pub trait LM {
 pub struct ZeroLM;
 
 impl LM for ZeroLM {
-    fn start(&mut self) -> LMStateRef {
+    type State = ();
+
+    fn start(&mut self) -> LMStateRef<Self::State> {
         LMStateRef::default()
     }
 
-    fn score(&mut self, state: &LMStateRef, token: i32) -> (LMStateRef, f32) {
-        (state.child(token), 0.0)
+    fn score(
+        &mut self,
+        state: &LMStateRef<Self::State>,
+        token: i32,
+    ) -> (LMStateRef<Self::State>, f32) {
+        (state.child(token, ()), 0.0)
     }
 
-    fn finish(&mut self, state: &LMStateRef) -> (LMStateRef, f32) {
+    fn finish(&mut self, state: &LMStateRef<Self::State>) -> (LMStateRef<Self::State>, f32) {
         (state.clone(), 0.0)
     }
 }

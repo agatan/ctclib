@@ -1,19 +1,35 @@
+use std::io::BufRead;
+
 use ctclib::{Decoder, DecoderOptions, ZeroLM};
 
-#[test]
-fn it_decodes_ctc_sequence_correctly() {
-    let vocab = ["'", " ", "a", "b", "c", "d", "_"];
-    #[rustfmt::skip]
-    let seq1 = [
-        0.06390443, 0.21124858, 0.27323887, 0.06870235, 0.03612540, 0.18184413, 0.16493624,
-        0.03309247, 0.22866108, 0.24390638, 0.09699597, 0.31895462, 0.00948930, 0.06890021,
-        0.21810400, 0.19992557, 0.18245131, 0.08503348, 0.14903535, 0.08424043, 0.08120984,
-        0.12094152, 0.19162472, 0.01473646, 0.28045061, 0.24246305, 0.05206269, 0.09772094,
-        0.13333870, 0.00550838, 0.00301669, 0.21745861, 0.20803985, 0.41317442, 0.01946335,
-        0.16468227, 0.19806990, 0.19065450, 0.18963251, 0.19860937, 0.04377724, 0.01457421,
-    ].into_iter().map(|x: f32| x.ln()).collect::<Vec<f32>>();
-    let blank = vocab.iter().position(|&r| r == "_").unwrap() as i32;
+fn load_logits() -> (usize, usize, Vec<f32>) {
+    let file = std::io::BufReader::new(std::fs::File::open("data/logit.txt").unwrap());
+    let mut lines = file.lines();
+    let step_and_vocab = lines
+        .next()
+        .unwrap()
+        .unwrap()
+        .split(" ")
+        .map(|x| x.parse::<usize>().unwrap())
+        .collect::<Vec<_>>();
+    let step = step_and_vocab[0];
+    let vocab = step_and_vocab[1];
+    let logits = lines
+        .map(|x| x.unwrap().parse::<f32>().unwrap())
+        .collect::<Vec<_>>();
+    (step, vocab, logits)
+}
 
+fn load_letter_dicts() -> Vec<String> {
+    let file = std::io::BufReader::new(std::fs::File::open("data/letter.dict").unwrap());
+    file.lines().map(|x| x.unwrap()).collect::<Vec<_>>()
+}
+
+#[test]
+fn greedy_decoder_decodes_sequence_greedy() {
+    let (steps, n_vocab, data) = load_logits();
+    let vocab = load_letter_dicts();
+    let blank = vocab.iter().position(|x| x == "<pad>").unwrap() as i32;
     let mut decoder = Decoder::new(
         DecoderOptions {
             beam_size: 1,
@@ -24,18 +40,25 @@ fn it_decodes_ctc_sequence_correctly() {
         blank,
         ZeroLM,
     );
-    let outputs = decoder.decode(&seq1, seq1.len() / vocab.len(), vocab.len());
-    let tokens = outputs[0]
-        .reduced_tokens(blank)
+    let outputs = decoder.decode(&data, steps, n_vocab);
+    let output = &outputs[0];
+    let tokens = output.reduced_tokens(blank);
+    let text = tokens
         .into_iter()
-        .map(|i| vocab[i as usize])
-        .collect::<Vec<_>>()
+        .map(|i| vocab[i as usize].as_str())
+        .collect::<Vec<&str>>()
         .join("");
-    assert_eq!(tokens, "ac'bdc");
+    assert_eq!(text, "MISTE|QUILTER|T|IS|TH|E|APOSTLESR|OF|THE|RIDDLE|CLASHES|AND|WEHARE|GOLADB|TO|WELCOME|HIS|GOSUPEL|N|");
+}
 
+#[test]
+fn beam_search_decoder_decodes_sequence() {
+    let (steps, n_vocab, data) = load_logits();
+    let vocab = load_letter_dicts();
+    let blank = vocab.iter().position(|x| x == "<pad>").unwrap() as i32;
     let mut decoder = Decoder::new(
         DecoderOptions {
-            beam_size: 200,
+            beam_size: 100,
             beam_size_token: 2000000,
             beam_threshold: f32::MAX,
             lm_weight: 0.0,
@@ -43,12 +66,13 @@ fn it_decodes_ctc_sequence_correctly() {
         blank,
         ZeroLM,
     );
-    let outputs = decoder.decode(&seq1, seq1.len() / vocab.len(), vocab.len());
-    let tokens = outputs[0]
-        .reduced_tokens(blank)
+    let outputs = decoder.decode(&data, steps, n_vocab);
+    let output = &outputs[0];
+    let tokens = output.reduced_tokens(blank);
+    let text = tokens
         .into_iter()
-        .map(|i| vocab[i as usize])
-        .collect::<Vec<_>>()
+        .map(|i| vocab[i as usize].as_str())
+        .collect::<Vec<&str>>()
         .join("");
-    assert_eq!(tokens, "acb");
+    assert_eq!(text, "MISTE|QUILTER|T|IS|TH|E|APOSTLES|OF|THE|RIDDLE|CLASHES|AND|WEHARE|GOLADB|TO|WELCOME|HIS|GOSPEL|N|");
 }

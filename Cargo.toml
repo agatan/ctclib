@@ -9,3 +9,4 @@ edition = "2021"
 libm = "~0.2"
 pdqselect = "~0.1"
 kenlm-sys = { path = "kenlm-sys", version = "0.1.0" }
+thiserror = "1.0.30"

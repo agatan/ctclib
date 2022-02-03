@@ -1,8 +1,10 @@
 use std::{collections::HashMap, ffi::CString};
 
-use crate::LMStateRef;
+use crate::{Dict, LMStateRef};
 
 use super::LM;
+
+pub type KenLMWordIndex = kenlm_sys::lm_WordIndex;
 
 #[derive(Debug, Clone)]
 struct KenLMState(kenlm_sys::lm_ngram_State);
@@ -50,7 +52,7 @@ impl Model {
         state
     }
 
-    fn base_score(&self, state: &KenLMState, token: i32) -> (KenLMState, f32) {
+    fn base_score(&self, state: &KenLMState, token: KenLMWordIndex) -> (KenLMState, f32) {
         state.with_ptr(|state_ptr| {
             let mut outstate = KenLMState::new();
             let score = outstate.with_mut_ptr(|out| unsafe {
@@ -78,21 +80,17 @@ impl Drop for Model {
 struct Vocabulary<'a>(*const kenlm_sys::lm_base_Vocabulary, &'a Model);
 
 impl<'a> Vocabulary<'a> {
-    fn begin_sentence(&self) -> i32 {
-        unsafe { kenlm_sys::lm_base_Vocabulary_BeginSentence(self.0) as i32 }
+    fn end_sentence(&self) -> KenLMWordIndex {
+        unsafe { kenlm_sys::lm_base_Vocabulary_EndSentence(self.0) }
     }
 
-    fn end_sentence(&self) -> i32 {
-        unsafe { kenlm_sys::lm_base_Vocabulary_EndSentence(self.0) as i32 }
-    }
-
-    fn index(&self, x: &str) -> i32 {
+    fn index(&self, x: &str) -> KenLMWordIndex {
         unsafe {
             kenlm_sys::lm_base_Vocabulary_Index(
                 self.0,
                 x.as_ptr() as *const _,
                 x.as_bytes().len() as u64,
-            ) as i32
+            )
         }
     }
 }
@@ -108,9 +106,9 @@ fn load_model_and_get_vocab() {
 
     let null_context = model.null_context();
     let (next_context, score) = model.base_score(&null_context, vocab.index("M"));
-    assert_eq!(score, -1.3873898);
+    assert_eq!(score, -1.3728311);
     let (_, score) = model.base_score(&next_context, model.vocab().index("I"));
-    assert_eq!(score, -0.812312);
+    assert_eq!(score, -0.77655447);
 
     // Drop explictly.
     std::mem::drop(model);
@@ -120,15 +118,27 @@ fn load_model_and_get_vocab() {
 pub struct KenLM {
     model: Model,
     kenlm_states: HashMap<LMStateRef, KenLMState>,
+    idx_to_kenlm_idx: HashMap<i32, kenlm_sys::lm_WordIndex>,
 }
 
 impl KenLM {
-    pub fn new<T: AsRef<str>>(path: T) -> Self {
+    pub fn new<T: AsRef<str>>(path: T, dict: &Dict) -> Self {
         // TODO: convert user vocabulary to KenLM's vocabulary
         let model = Model::new(path);
+        let vocab = model.vocab();
+
+        let idx_to_kenlm_idx = dict
+            .iter()
+            .map(|(word, idx)| {
+                let kenlm_idx = vocab.index(word);
+                (*idx, kenlm_idx)
+            })
+            .collect::<HashMap<_, _>>();
+
         Self {
             model,
             kenlm_states: HashMap::new(),
+            idx_to_kenlm_idx,
         }
     }
 }
@@ -142,11 +152,11 @@ impl LM for KenLM {
     }
 
     fn score(&mut self, state: &LMStateRef, token: i32) -> (LMStateRef, f32) {
-        // TODO: Convert KenLM index to user index
+        let kenlm_idx = self.idx_to_kenlm_idx[&token];
         let outstate = state.child(token);
         let (next_kenlm_state, score) = {
             let kenlm_state = &self.kenlm_states[state];
-            self.model.base_score(kenlm_state, token)
+            self.model.base_score(kenlm_state, kenlm_idx)
         };
         self.kenlm_states.insert(outstate.clone(), next_kenlm_state);
         (outstate, score)
@@ -154,7 +164,7 @@ impl LM for KenLM {
 
     fn finish(&mut self, state: &LMStateRef) -> (LMStateRef, f32) {
         let eos = self.model.vocab().end_sentence();
-        let outstate = state.child(eos);
+        let outstate = state.child(-1);
         let (next_kenlm_state, score) = {
             let kenlm_state = &self.kenlm_states[state];
             self.model.base_score(kenlm_state, eos)

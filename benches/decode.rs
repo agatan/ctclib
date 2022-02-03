@@ -1,7 +1,7 @@
 use std::io::BufRead;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use ctclib::{Decoder, DecoderOptions, ZeroLM, KenLM, Dict};
+use ctclib::{Decoder, DecoderOptions, Dict, KenLM, ZeroLM};
 
 fn load_logits() -> (usize, usize, Vec<f32>) {
     let file = std::io::BufReader::new(std::fs::File::open("data/logit.txt").unwrap());
@@ -35,10 +35,14 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab))
     });
     let dict = Dict::read("data/letter.dict").unwrap();
-    let mut decoder = Decoder::new(DecoderOptions{
-        lm_weight: 0.5,
-        ..option.clone()
-    }, blank, KenLM::new("data/overfit.arpa", &dict));
+    let mut decoder = Decoder::new(
+        DecoderOptions {
+            lm_weight: 0.5,
+            ..option.clone()
+        },
+        blank,
+        KenLM::new("data/overfit.arpa", &dict),
+    );
     c.bench_function("KenLM", |b| {
         b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab))
     });

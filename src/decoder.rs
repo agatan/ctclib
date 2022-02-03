@@ -13,7 +13,7 @@ struct DecoderState<T> {
     lm_state: LMStateRef<T>,
 }
 
-impl <T> Clone for DecoderState<T> {
+impl<T> Clone for DecoderState<T> {
     fn clone(&self) -> Self {
         Self {
             score: self.score,

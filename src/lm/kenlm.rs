@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::CString};
+use std::ffi::CString;
 
 use crate::{Dict, LMStateRef};
 
@@ -125,7 +125,7 @@ impl KenLM {
         let model = Model::new(path);
         let vocab = model.vocab();
 
-        let mut idx_to_kenlm_idx = vec![0 as KenLMWordIndex; dict.len()];
+        let mut idx_to_kenlm_idx = vec![0; dict.len()];
 
         for (word, &idx) in dict.iter() {
             let kenlm_idx = vocab.index(word);

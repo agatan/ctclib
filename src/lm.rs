@@ -1,7 +1,12 @@
 pub mod kenlm;
 pub use kenlm::KenLM;
 
-use std::{cell::{RefCell, Ref}, collections::HashMap, fmt::Debug, rc::Rc};
+use std::{
+    cell::{Ref, RefCell},
+    collections::HashMap,
+    fmt::Debug,
+    rc::Rc,
+};
 
 #[derive(Debug, Default)]
 pub struct LMState<T> {
@@ -43,7 +48,7 @@ impl<T> LMStateRef<T> {
         child.clone()
     }
 
-    fn borrow_internal_state<'a>(&'a self) -> Ref<'a, T> {
+    fn borrow_internal_state(&self) -> Ref<'_, T> {
         let r = self.0.borrow();
         Ref::map(r, |s| &s.state)
     }

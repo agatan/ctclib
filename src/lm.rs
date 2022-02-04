@@ -1,16 +1,16 @@
 pub mod kenlm;
 pub use kenlm::KenLM;
+use rustc_hash::FxHashMap;
 
 use std::{
     cell::{Ref, RefCell},
-    collections::HashMap,
     fmt::Debug,
     rc::Rc,
 };
 
 #[derive(Debug, Default)]
 pub struct LMState<T> {
-    children: HashMap<i32, LMStateRef<T>>,
+    children: FxHashMap<i32, LMStateRef<T>>,
     state: T,
 }
 
@@ -34,7 +34,7 @@ impl<T> std::hash::Hash for LMStateRef<T> {
 impl<T> LMStateRef<T> {
     fn new(state: T) -> Self {
         Self(Rc::new(RefCell::new(LMState {
-            children: HashMap::new(),
+            children: FxHashMap::default(),
             state,
         })))
     }

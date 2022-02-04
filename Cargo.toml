@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 libm = "~0.2"
 pdqselect = "~0.1"
-kenlm-sys = { path = "kenlm-sys", version = "0.1.0" }
+kenlm-sys = { path = "kenlm-sys", version = "0.1.0", optional = true }
 thiserror = "1.0.30"
 dhat = { version = "0.3.0", optional = true }
 
@@ -20,4 +20,6 @@ name = "decode"
 harness = false
 
 [features]
+default = ["kenlm"]
+kenlm = ["kenlm-sys"]
 dhat-heap = ["dhat"]

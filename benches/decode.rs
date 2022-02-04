@@ -1,7 +1,7 @@
 use std::io::BufRead;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use ctclib::{Decoder, DecoderOptions, Dict, KenLM, ZeroLM};
+use ctclib::{Decoder, DecoderOptions, ZeroLM};
 
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -25,26 +25,37 @@ fn load_logits() -> (usize, usize, Vec<f32>) {
     (step, vocab, logits)
 }
 
-fn criterion_benchmark(c: &mut Criterion) {
-    let (steps, n_vocab, data) = load_logits();
-    let blank = (n_vocab - 1) as i32;
-    let option = DecoderOptions {
+fn decoder_options() -> DecoderOptions {
+    DecoderOptions {
         beam_size: 100,
         beam_size_token: 2000000,
         beam_threshold: f32::MAX,
         lm_weight: 0.0,
-    };
-    let mut decoder = Decoder::new(option.clone(), blank, ZeroLM::new(n_vocab));
+    }
+}
+
+fn criterion_benchmark(c: &mut Criterion) {
+    let (steps, n_vocab, data) = load_logits();
+    let blank = (n_vocab - 1) as i32;
+    let mut decoder = Decoder::new(decoder_options(), blank, ZeroLM::new(n_vocab));
     c.bench_function("ZeroLM", |b| {
         #[cfg(feature = "dhat-heap")]
         let _profiler = dhat::Profiler::new_heap();
         b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab))
     });
+}
+
+#[cfg(feature = "kenlm")]
+fn criterion_benchmark_kenlm(c: &mut Criterion) {
+    use ctclib::{Dict, KenLM};
+
+    let (steps, n_vocab, data) = load_logits();
+    let blank = (n_vocab - 1) as i32;
     let dict = Dict::read("data/letter.dict").unwrap();
     let mut decoder = Decoder::new(
         DecoderOptions {
             lm_weight: 0.5,
-            ..option.clone()
+            ..decoder_options()
         },
         blank,
         KenLM::new("data/overfit.arpa", &dict),
@@ -54,5 +65,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 }
 
+#[cfg(not(feature = "kenlm"))]
 criterion_group!(benches, criterion_benchmark);
+#[cfg(feature = "kenlm")]
+criterion_group!(benches, criterion_benchmark, criterion_benchmark_kenlm);
 criterion_main!(benches);

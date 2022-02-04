@@ -1,5 +1,5 @@
+#[cfg(feature = "kenlm")]
 pub mod kenlm;
-pub use kenlm::KenLM;
 
 use std::{
     cell::{Ref, RefCell},
@@ -10,6 +10,7 @@ use std::{
 #[derive(Debug, Default)]
 pub struct LMState<T> {
     children: Vec<Option<LMStateRef<T>>>,
+    #[allow(dead_code)]
     state: T,
 }
 
@@ -31,14 +32,14 @@ impl<T> std::hash::Hash for LMStateRef<T> {
 }
 
 impl<T> LMStateRef<T> {
-    fn new(state: T) -> Self {
+    pub fn new(state: T) -> Self {
         Self(Rc::new(RefCell::new(LMState {
             children: Vec::new(),
             state,
         })))
     }
 
-    fn child(&self, token: i32, n_vocab: usize, state: T) -> Self {
+    pub fn child(&self, token: i32, n_vocab: usize, state: T) -> Self {
         let mut self_state = self.0.borrow_mut();
         // Allocate spaces lazily.
         if self_state.children.is_empty() {
@@ -57,7 +58,7 @@ impl<T> LMStateRef<T> {
         }
     }
 
-    fn borrow_internal_state(&self) -> Ref<'_, T> {
+    pub fn borrow_internal_state(&self) -> Ref<'_, T> {
         let r = self.0.borrow();
         Ref::map(r, |s| &s.state)
     }

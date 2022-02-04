@@ -3,6 +3,10 @@ use std::io::BufRead;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use ctclib::{Decoder, DecoderOptions, Dict, KenLM, ZeroLM};
 
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 fn load_logits() -> (usize, usize, Vec<f32>) {
     let file = std::io::BufReader::new(std::fs::File::open("data/logit.txt").unwrap());
     let mut lines = file.lines();
@@ -32,6 +36,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     };
     let mut decoder = Decoder::new(option.clone(), blank, ZeroLM::new(n_vocab));
     c.bench_function("ZeroLM", |b| {
+        #[cfg(feature = "dhat-heap")]
+        let _profiler = dhat::Profiler::new_heap();
         b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab))
     });
     let dict = Dict::read("data/letter.dict").unwrap();

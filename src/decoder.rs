@@ -155,7 +155,8 @@ impl<T: LM> Decoder<T> {
     fn decode_step(&mut self, data: &[f32], steps: usize, tokens: usize) {
         // Reserve hypothesis buffer.
         while self.hypothesis.len() < steps + 2 {
-            self.hypothesis.push(Vec::with_capacity(self.options.beam_size));
+            self.hypothesis
+                .push(Vec::with_capacity(self.options.beam_size));
         }
 
         // Loop over time steps.

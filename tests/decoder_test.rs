@@ -38,7 +38,7 @@ fn greedy_decoder_decodes_sequence_greedy() {
             lm_weight: 0.0,
         },
         blank,
-        ZeroLM,
+        ZeroLM::new(n_vocab),
     );
     let outputs = decoder.decode(&data, steps, n_vocab);
     let output = &outputs[0];
@@ -64,7 +64,7 @@ fn beam_search_decoder_decodes_sequence() {
             lm_weight: 0.0,
         },
         blank,
-        ZeroLM,
+        ZeroLM::new(n_vocab),
     );
     let outputs = decoder.decode(&data, steps, n_vocab);
     let output = &outputs[0];

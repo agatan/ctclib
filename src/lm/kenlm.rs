@@ -113,7 +113,9 @@ fn load_model_and_get_vocab() {
     std::mem::drop(model);
 }
 
-/// A wrapper of a KenLM for decoding.
+/// KenLM integration for ctc decoding.
+/// KenLM is a n-gram language model library written in C++.
+/// See https://github.com/kpu/kenlm for more details about KenLM itself.
 pub struct KenLM {
     model: Model,
     idx_to_kenlm_idx: Vec<KenLMWordIndex>,
@@ -167,7 +169,7 @@ impl LM for KenLM {
         let eos = self.model.vocab().end_sentence();
         let (next_kenlm_state, score) =
             { self.model.base_score(&state.borrow_internal_state(), eos) };
-        let outstate = state.child(-1, self.n_vocab, next_kenlm_state);
+        let outstate = state.child(self.n_vocab as i32, self.n_vocab, next_kenlm_state);
         (outstate, score)
     }
 }

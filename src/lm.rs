@@ -1,6 +1,5 @@
 pub mod kenlm;
 pub use kenlm::KenLM;
-use rustc_hash::FxHashMap;
 
 use std::{
     cell::{Ref, RefCell},
@@ -10,7 +9,7 @@ use std::{
 
 #[derive(Debug, Default)]
 pub struct LMState<T> {
-    children: FxHashMap<i32, LMStateRef<T>>,
+    children: Vec<Option<LMStateRef<T>>>,
     state: T,
 }
 
@@ -34,19 +33,28 @@ impl<T> std::hash::Hash for LMStateRef<T> {
 impl<T> LMStateRef<T> {
     fn new(state: T) -> Self {
         Self(Rc::new(RefCell::new(LMState {
-            children: FxHashMap::default(),
+            children: Vec::new(),
             state,
         })))
     }
 
     fn child(&self, token: i32, n_vocab: usize, state: T) -> Self {
         let mut self_state = self.0.borrow_mut();
-        self_state.children.reserve(n_vocab);
-        let child = self_state
-            .children
-            .entry(token)
-            .or_insert_with(|| LMStateRef::new(state));
-        child.clone()
+        // Allocate spaces lazily.
+        if self_state.children.is_empty() {
+            self_state.children.resize(n_vocab + 1 /* EOS */, None);
+        }
+        let child = &mut self_state.children[token as usize];
+        match child {
+            // If the child is already allocated, return it.
+            Some(ref child) => child.clone(),
+            // If not, allocate it and return it.
+            None => {
+                let new_child = LMStateRef::new(state);
+                *child = Some(new_child.clone());
+                new_child
+            }
+        }
     }
 
     fn borrow_internal_state(&self) -> Ref<'_, T> {

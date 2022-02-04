@@ -1,6 +1,6 @@
-use rustc_hash::FxHashMap;
 use std::{
     borrow::Borrow,
+    collections::HashMap,
     fs::File,
     io::{BufRead, BufReader, Read},
     path::Path,
@@ -21,8 +21,8 @@ pub enum DictError {
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Dict {
-    entry2idx: FxHashMap<String, i32>,
-    idx2entry: FxHashMap<i32, String>,
+    entry2idx: HashMap<String, i32>,
+    idx2entry: HashMap<i32, String>,
 }
 
 impl Dict {

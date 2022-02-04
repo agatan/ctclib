@@ -39,12 +39,13 @@ impl<T> LMStateRef<T> {
         })))
     }
 
-    fn child(&self, token: i32, internal_state: T) -> Self {
-        let mut state = self.0.borrow_mut();
-        let child = state
+    fn child(&self, token: i32, n_vocab: usize, state: T) -> Self {
+        let mut self_state = self.0.borrow_mut();
+        self_state.children.reserve(n_vocab);
+        let child = self_state
             .children
             .entry(token)
-            .or_insert_with(|| LMStateRef::new(internal_state));
+            .or_insert_with(|| LMStateRef::new(state));
         child.clone()
     }
 
@@ -91,13 +92,21 @@ pub trait LM {
 /// ZeroLM is a language model that always returns 0.
 /// This is a stub implementation of LM for interface consistency.
 #[derive(Debug)]
-pub struct ZeroLM;
+pub struct ZeroLM {
+    n_vocab: usize,
+}
+
+impl ZeroLM {
+    pub fn new(n_vocab: usize) -> Self {
+        Self { n_vocab }
+    }
+}
 
 impl LM for ZeroLM {
     type State = ();
 
     fn start(&mut self) -> LMStateRef<Self::State> {
-        LMStateRef::default()
+        LMStateRef::new(())
     }
 
     fn score(
@@ -105,7 +114,7 @@ impl LM for ZeroLM {
         state: &LMStateRef<Self::State>,
         token: i32,
     ) -> (LMStateRef<Self::State>, f32) {
-        (state.child(token, ()), 0.0)
+        (state.child(token, self.n_vocab, ()), 0.0)
     }
 
     fn finish(&mut self, state: &LMStateRef<Self::State>) -> (LMStateRef<Self::State>, f32) {

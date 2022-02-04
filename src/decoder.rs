@@ -382,7 +382,7 @@ mod tests {
             beam_threshold: f32::MAX,
             lm_weight: 0.0,
         };
-        let mut decoder = Decoder::new(options, 4, ZeroLM);
+        let mut decoder = Decoder::new(options, 4, ZeroLM::new(4));
         let steps = 3;
         let tokens = 4;
         #[rustfmt::skip]

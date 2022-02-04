@@ -117,6 +117,7 @@ fn load_model_and_get_vocab() {
 pub struct KenLM {
     model: Model,
     idx_to_kenlm_idx: Vec<KenLMWordIndex>,
+    n_vocab: usize,
 }
 
 impl KenLM {
@@ -135,6 +136,7 @@ impl KenLM {
         Self {
             model,
             idx_to_kenlm_idx,
+            n_vocab: dict.len(),
         }
     }
 }
@@ -157,7 +159,7 @@ impl LM for KenLM {
             self.model
                 .base_score(&state.borrow_internal_state(), kenlm_idx)
         };
-        let outstate = state.child(token, next_kenlm_state);
+        let outstate = state.child(token, self.n_vocab, next_kenlm_state);
         (outstate, score)
     }
 
@@ -165,7 +167,7 @@ impl LM for KenLM {
         let eos = self.model.vocab().end_sentence();
         let (next_kenlm_state, score) =
             { self.model.base_score(&state.borrow_internal_state(), eos) };
-        let outstate = state.child(-1, next_kenlm_state);
+        let outstate = state.child(-1, self.n_vocab, next_kenlm_state);
         (outstate, score)
     }
 }

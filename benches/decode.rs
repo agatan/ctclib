@@ -30,7 +30,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         beam_threshold: f32::MAX,
         lm_weight: 0.0,
     };
-    let mut decoder = Decoder::new(option.clone(), blank, ZeroLM);
+    let mut decoder = Decoder::new(option.clone(), blank, ZeroLM::new(n_vocab));
     c.bench_function("ZeroLM", |b| {
         b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab))
     });

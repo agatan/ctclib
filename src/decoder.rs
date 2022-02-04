@@ -155,7 +155,7 @@ impl<T: LM> Decoder<T> {
     fn decode_step(&mut self, data: &[f32], steps: usize, tokens: usize) {
         // Reserve hypothesis buffer.
         while self.hypothesis.len() < steps + 2 {
-            self.hypothesis.push(Vec::new());
+            self.hypothesis.push(Vec::with_capacity(self.options.beam_size));
         }
 
         // Loop over time steps.
@@ -266,7 +266,7 @@ impl<T: LM> Decoder<T> {
     }
 
     /// Finalize candidates at the current time step.
-    /// This prunes the candidates and sort them by score.
+    /// This prunes the candidates, sort them by score and store them into hyp[t + 1].
     fn finalize_candidate(&mut self, t: usize) {
         // 1. Gather valid candidates.
         // ================================================================
@@ -307,7 +307,6 @@ impl<T: LM> Decoder<T> {
         }
         self.current_candidate_pointers
             .truncate(n_candidates_after_merged);
-        self.current_candidate_pointers.shrink_to_fit();
 
         // 3. Sort candidates.
         if self.current_candidate_pointers.len() > self.options.beam_size {

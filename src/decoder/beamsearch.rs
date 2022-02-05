@@ -228,34 +228,27 @@ impl<T: LM> BeamSearchDecoder<T> {
         // ================================================================
         // Sort candidates so that the same patterns are consecutive.
         self.current_candidate_pointers.sort_by_key(|a| {
-            let x = unsafe { self.current_candidates.get_unchecked(*a) };
+            let x = &self.current_candidates[*a];
             (&x.lm_state, x.token, x.prev_blank, OrderedFloat(x.score))
         });
         let mut n_candidates_after_merged = 1;
-        let mut last_ptr = unsafe { *self.current_candidate_pointers.get_unchecked(0) };
+        let mut last_ptr = self.current_candidate_pointers[0];
         for i in 1..self.current_candidate_pointers.len() {
-            let ptr = unsafe { *self.current_candidate_pointers.get_unchecked(i) };
-            if !unsafe {
-                self.current_candidates
-                    .get_unchecked(ptr)
-                    .is_same_lm_state(self.current_candidates.get_unchecked(last_ptr))
-            } {
+            let ptr = self.current_candidate_pointers[i];
+            if !self.current_candidates[ptr].is_same_lm_state(&self.current_candidates[last_ptr]) {
                 // Distinct pattern.
-                *unsafe {
-                    self.current_candidate_pointers
-                        .get_unchecked_mut(n_candidates_after_merged)
-                } = ptr;
+                self.current_candidate_pointers[n_candidates_after_merged] = ptr;
                 n_candidates_after_merged += 1;
                 last_ptr = ptr;
             } else {
                 // Same pattern.
-                let (last, current) = unsafe {
+                let (last, current) = {
                     if last_ptr < ptr {
                         let (head, tail) = self.current_candidates.split_at_mut(ptr);
-                        (head.get_unchecked_mut(last_ptr), tail.get_unchecked_mut(0))
+                        (&mut head[last_ptr], &mut tail[0])
                     } else {
                         let (head, tail) = self.current_candidates.split_at_mut(last_ptr);
-                        (tail.get_unchecked_mut(0), head.get_unchecked_mut(ptr))
+                        (&mut tail[0], &mut head[ptr])
                     }
                 };
                 let max_score = last.score.max(current.score);

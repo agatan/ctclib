@@ -79,7 +79,13 @@ impl<T> Eq for LMStateRef<T> {}
 
 impl<T> PartialOrd for LMStateRef<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.as_ptr().partial_cmp(&other.0.as_ptr())
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for LMStateRef<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.as_ptr().cmp(&other.0.as_ptr())
     }
 }
 

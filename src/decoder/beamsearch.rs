@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use ordered_float::OrderedFloat;
 
 use super::{Decoder, DecoderOutput};
 use crate::lm::{LMStateRef, LM};
@@ -30,32 +30,10 @@ impl<T> Clone for DecoderState<T> {
 
 impl<T> DecoderState<T> {
     /// Compare two states by their internal conditions ignoring the scores.
-    /// This is used to sort states so that the same states will be consecutive.
-    fn cmp_without_score(&self, other: &DecoderState<T>) -> Ordering {
-        let lm_cmp = self.lm_state.partial_cmp(&other.lm_state).unwrap();
-        if lm_cmp != Ordering::Equal {
-            return lm_cmp;
-        }
-        if self.token != other.token {
-            self.token.cmp(&other.token)
-        } else if self.prev_blank != other.prev_blank {
-            self.prev_blank.cmp(&other.prev_blank)
-        } else {
-            Ordering::Equal
-        }
-    }
-
-    fn cmp_without_score_then_score(&self, other: &DecoderState<T>) -> Ordering {
-        let without_score = self.cmp_without_score(other);
-        if without_score != Ordering::Equal {
-            without_score
-        } else {
-            self.cmp_by_score(other)
-        }
-    }
-
-    fn cmp_by_score(&self, other: &DecoderState<T>) -> Ordering {
-        self.score.partial_cmp(&other.score).unwrap()
+    fn is_same_lm_state(&self, other: &DecoderState<T>) -> bool {
+        return self.lm_state == other.lm_state
+            && self.token == other.token
+            && self.prev_blank == other.prev_blank;
     }
 }
 
@@ -249,16 +227,15 @@ impl<T: LM> BeamSearchDecoder<T> {
         // 2. Merge same patterns.
         // ================================================================
         // Sort candidates so that the same patterns are consecutive.
-        self.current_candidate_pointers.sort_by(|a, b| {
-            self.current_candidates[*a].cmp_without_score_then_score(&self.current_candidates[*b])
+        self.current_candidate_pointers.sort_by_key(|a| {
+            let x = &self.current_candidates[*a];
+            (&x.lm_state, x.token, x.prev_blank, OrderedFloat(x.score))
         });
         let mut n_candidates_after_merged = 1;
         let mut last_ptr = self.current_candidate_pointers[0];
         for i in 1..self.current_candidate_pointers.len() {
             let ptr = self.current_candidate_pointers[i];
-            if self.current_candidates[ptr].cmp_without_score(&self.current_candidates[last_ptr])
-                != Ordering::Equal
-            {
+            if !self.current_candidates[ptr].is_same_lm_state(&self.current_candidates[last_ptr]) {
                 // Distinct pattern.
                 self.current_candidate_pointers[n_candidates_after_merged] = ptr;
                 n_candidates_after_merged += 1;
@@ -280,14 +257,10 @@ impl<T: LM> BeamSearchDecoder<T> {
 
         // 3. Sort candidates.
         if self.current_candidate_pointers.len() > self.options.beam_size {
-            pdqselect::select_by(
+            pdqselect::select_by_key(
                 &mut self.current_candidate_pointers,
                 self.options.beam_size,
-                |&a, &b| {
-                    self.current_candidates[a]
-                        .cmp_by_score(&self.current_candidates[b])
-                        .reverse()
-                },
+                |&x| OrderedFloat(-self.current_candidates[x].score),
             );
         }
 

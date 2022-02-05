@@ -45,7 +45,6 @@ fn main() {
     cc::Build::new()
         .cpp(true)
         .file("wrapper.cpp")
-        .flag("-fkeep-inline-functions")
         .compile("wrapper");
 
     // link to appropriate C++ lib

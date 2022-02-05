@@ -41,7 +41,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("GreedyDecoder", |b| {
         b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab))
     });
-    let mut decoder = BeamSearchDecoder::new(decoder_options(), blank, ZeroLM::new(n_vocab));
+    let mut decoder = BeamSearchDecoder::new(decoder_options(), blank, ZeroLM);
     c.bench_function("ZeroLM", |b| {
         #[cfg(feature = "dhat-heap")]
         let _profiler = dhat::Profiler::new_heap();

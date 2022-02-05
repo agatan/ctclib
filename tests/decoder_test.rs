@@ -57,7 +57,7 @@ fn beam_search_decoder_decodes_sequence() {
             lm_weight: 0.0,
         },
         blank,
-        ZeroLM::new(n_vocab),
+        ZeroLM,
     );
     let outputs = decoder.decode(&data, steps, n_vocab);
     let output = &outputs[0];

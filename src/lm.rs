@@ -93,6 +93,7 @@ pub trait LM {
         &mut self,
         state: &LMStateRef<Self::State>,
         token: i32,
+        n_vocab: usize,
     ) -> (LMStateRef<Self::State>, f32);
     // Returns the new state and the score of the final state.
     fn finish(&mut self, state: &LMStateRef<Self::State>) -> (LMStateRef<Self::State>, f32);
@@ -101,15 +102,7 @@ pub trait LM {
 /// ZeroLM is a language model that always returns 0.
 /// This is a stub implementation of LM for interface consistency.
 #[derive(Debug)]
-pub struct ZeroLM {
-    n_vocab: usize,
-}
-
-impl ZeroLM {
-    pub fn new(n_vocab: usize) -> Self {
-        Self { n_vocab }
-    }
-}
+pub struct ZeroLM;
 
 impl LM for ZeroLM {
     type State = ();
@@ -122,8 +115,9 @@ impl LM for ZeroLM {
         &mut self,
         state: &LMStateRef<Self::State>,
         token: i32,
+        n_vocab: usize,
     ) -> (LMStateRef<Self::State>, f32) {
-        (state.child(token, self.n_vocab, ()), 0.0)
+        (state.child(token, n_vocab, ()), 0.0)
     }
 
     fn finish(&mut self, state: &LMStateRef<Self::State>) -> (LMStateRef<Self::State>, f32) {

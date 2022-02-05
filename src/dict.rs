@@ -45,6 +45,14 @@ impl Dict {
         Ok(dict)
     }
 
+    pub fn from_entries<I: IntoIterator<Item = String>>(entries: I) -> Result<Self, DictError> {
+        let mut dict = Self::new();
+        for entry in entries {
+            dict.add_entry(entry)?;
+        }
+        Ok(dict)
+    }
+
     pub fn len(&self) -> usize {
         debug_assert!(self.entry2idx.len() == self.idx2entry.len());
         self.entry2idx.len()

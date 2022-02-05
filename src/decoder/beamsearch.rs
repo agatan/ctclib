@@ -123,7 +123,7 @@ impl<T: LM> BeamSearchDecoder<T> {
         });
     }
 
-    fn decode_step(&mut self, data: &[f32], steps: usize, tokens: usize) {
+    fn decode_step(&mut self, data: &[f32], steps: usize, n_vocab: usize) {
         // Reserve hypothesis buffer.
         while self.hypothesis.len() < steps + 2 {
             self.hypothesis
@@ -131,13 +131,13 @@ impl<T: LM> BeamSearchDecoder<T> {
         }
 
         // Loop over time steps.
-        let mut target_index = (0..tokens).collect::<Vec<_>>();
+        let mut target_index = (0..n_vocab).collect::<Vec<_>>();
         for t in 0..steps {
-            if tokens > self.options.beam_size_token {
+            if n_vocab > self.options.beam_size_token {
                 // Collect tokens with the high score at the top `beam_size_token`.
                 pdqselect::select_by(&mut target_index, self.options.beam_size_token, |&a, &b| {
-                    data[t * tokens + a]
-                        .partial_cmp(&data[t * tokens + b])
+                    data[t * n_vocab + a]
+                        .partial_cmp(&data[t * n_vocab + b])
                         .unwrap()
                         .reverse()
                 });
@@ -152,12 +152,13 @@ impl<T: LM> BeamSearchDecoder<T> {
                         .take(self.options.beam_size_token)
                         .map(|&target| {
                             let token = target as i32;
-                            let am_score = data[t * tokens + target];
+                            let am_score = data[t * n_vocab + target];
                             let score = prev_hyp.score + am_score;
 
                             if token != self.blank && (token != prev_token || prev_hyp.prev_blank) {
                                 // New token
-                                let (lm_state, lm_score) = self.lm.score(prev_lm_state, token);
+                                let (lm_state, lm_score) =
+                                    self.lm.score(prev_lm_state, token, n_vocab);
                                 DecoderState {
                                     score: score + self.options.lm_weight * lm_score,
                                     token,
@@ -340,9 +341,7 @@ fn add_candidate<T>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        decoder::Decoder, lm::ZeroLM, BeamSearchDecoder, BeamSearchDecoderOptions, DecoderOutput,
-    };
+    use crate::{lm::ZeroLM, BeamSearchDecoder, BeamSearchDecoderOptions, Decoder, DecoderOutput};
 
     #[test]
     fn it_works() {
@@ -352,7 +351,7 @@ mod tests {
             beam_threshold: f32::MAX,
             lm_weight: 0.0,
         };
-        let mut decoder = BeamSearchDecoder::new(options, 4, ZeroLM::new(4));
+        let mut decoder = BeamSearchDecoder::new(options, 4, ZeroLM);
         let steps = 3;
         let tokens = 4;
         #[rustfmt::skip]

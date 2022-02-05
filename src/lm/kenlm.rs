@@ -155,13 +155,14 @@ impl LM for KenLM {
         &mut self,
         state: &LMStateRef<Self::State>,
         token: i32,
+        n_vocab: usize,
     ) -> (LMStateRef<Self::State>, f32) {
         let kenlm_idx = self.idx_to_kenlm_idx[token as usize];
         let (next_kenlm_state, score) = {
             self.model
                 .base_score(&state.borrow_internal_state(), kenlm_idx)
         };
-        let outstate = state.child(token, self.n_vocab, next_kenlm_state);
+        let outstate = state.child(token, n_vocab, next_kenlm_state);
         (outstate, score)
     }
 

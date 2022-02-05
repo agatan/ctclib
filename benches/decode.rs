@@ -1,7 +1,7 @@
 use std::io::BufRead;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use ctclib::{Decoder, DecoderOptions, ZeroLM};
+use ctclib::{BeamSearchDecoder, BeamSearchDecoderOptions, Decoder, ZeroLM};
 
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -25,8 +25,8 @@ fn load_logits() -> (usize, usize, Vec<f32>) {
     (step, vocab, logits)
 }
 
-fn decoder_options() -> DecoderOptions {
-    DecoderOptions {
+fn decoder_options() -> BeamSearchDecoderOptions {
+    BeamSearchDecoderOptions {
         beam_size: 100,
         beam_size_token: 2000000,
         beam_threshold: f32::MAX,
@@ -37,7 +37,7 @@ fn decoder_options() -> DecoderOptions {
 fn criterion_benchmark(c: &mut Criterion) {
     let (steps, n_vocab, data) = load_logits();
     let blank = (n_vocab - 1) as i32;
-    let mut decoder = Decoder::new(decoder_options(), blank, ZeroLM::new(n_vocab));
+    let mut decoder = BeamSearchDecoder::new(decoder_options(), blank, ZeroLM::new(n_vocab));
     c.bench_function("ZeroLM", |b| {
         #[cfg(feature = "dhat-heap")]
         let _profiler = dhat::Profiler::new_heap();
@@ -52,8 +52,8 @@ fn criterion_benchmark_kenlm(c: &mut Criterion) {
     let (steps, n_vocab, data) = load_logits();
     let blank = (n_vocab - 1) as i32;
     let dict = Dict::read("data/letter.dict").unwrap();
-    let mut decoder = Decoder::new(
-        DecoderOptions {
+    let mut decoder = BeamSearchDecoder::new(
+        BeamSearchDecoderOptions {
             lm_weight: 0.5,
             ..decoder_options()
         },

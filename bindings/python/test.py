@@ -28,10 +28,9 @@ class LM:
 
 
 def read_sample():
-    with open("../../data/logit.txt", "r") as fp:
-        steps, n_vocab = [int(x) for x in fp.readline().strip().split(" ")]
-        logits = [float(x.strip()) for x in fp.readlines() if x.strip()]
-        return logits, steps, n_vocab
+    import numpy as np
+    logits = np.loadtxt("../../data/logit.txt")
+    return logits.reshape(-1), logits.shape[0], logits.shape[1]
 
 
 def read_vocab():
@@ -47,8 +46,6 @@ def decode_ctc(tokens, blank):
         prev = token
 
 data, steps, n_vocab = read_sample()
-import numpy as np
-np.savetxt("data", np.asarray(data).reshape((steps, n_vocab)))
 vocab = read_vocab()
 
 decoder = pyctclib.GreedyDecoder()

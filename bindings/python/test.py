@@ -47,6 +47,8 @@ def decode_ctc(tokens, blank):
         prev = token
 
 data, steps, n_vocab = read_sample()
+import numpy as np
+np.savetxt("data", np.asarray(data).reshape((steps, n_vocab)))
 vocab = read_vocab()
 
 decoder = pyctclib.GreedyDecoder()

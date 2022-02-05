@@ -6,19 +6,14 @@ use ctclib::{
 
 fn load_logits() -> (usize, usize, Vec<f32>) {
     let file = std::io::BufReader::new(std::fs::File::open("data/logit.txt").unwrap());
-    let mut lines = file.lines();
-    let step_and_vocab = lines
-        .next()
-        .unwrap()
-        .unwrap()
-        .split(" ")
-        .map(|x| x.parse::<usize>().unwrap())
-        .collect::<Vec<_>>();
-    let step = step_and_vocab[0];
-    let vocab = step_and_vocab[1];
-    let logits = lines
-        .map(|x| x.unwrap().parse::<f32>().unwrap())
-        .collect::<Vec<_>>();
+    let lines = file.lines().collect::<Result<Vec<_>, _>>().unwrap();
+    let step = lines.len();
+    let mut logits = Vec::new();
+    for line in lines {
+        let iter = line.split(" ").map(|x| x.parse::<f32>().unwrap());
+        logits.extend(iter);
+    }
+    let vocab = logits.len() / step;
     (step, vocab, logits)
 }
 

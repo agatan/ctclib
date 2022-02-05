@@ -42,7 +42,11 @@ fn main() {
         .expect("Couldn't write bindings.");
     println!("cargo:rerun-if-changed=wrapper.cpp");
     println!("cargo:rerun-if-changed=wrapper.h");
-    cc::Build::new().cpp(true).file("wrapper.cpp").flag("-fkeep-inline-functions").compile("wrapper");
+    cc::Build::new()
+        .cpp(true)
+        .file("wrapper.cpp")
+        .flag("-fkeep-inline-functions")
+        .compile("wrapper");
 
     // link to appropriate C++ lib
     if target.contains("apple") {

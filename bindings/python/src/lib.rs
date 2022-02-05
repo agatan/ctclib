@@ -2,6 +2,8 @@ use std::sync::Mutex;
 
 use pyo3::{exceptions, prelude::*, PyObjectProtocol};
 
+mod pylm;
+
 #[pyclass]
 #[derive(Clone)]
 struct BeamSearchDecoderOptions(ctclib::BeamSearchDecoderOptions);
@@ -141,6 +143,26 @@ impl BeamSearchDecoderWithKenLM {
     }
 }
 
+#[pyclass(extends=Decoder)]
+struct BeamSearchDecoderWithPyLM;
+
+#[pymethods]
+impl BeamSearchDecoderWithPyLM {
+    #[new]
+    fn new(
+        options: BeamSearchDecoderOptions,
+        blank_id: i32,
+        lm: PyObject,
+    ) -> PyResult<(Self, Decoder)> {
+        Ok((
+            BeamSearchDecoderWithPyLM,
+            Decoder(Box::new(BeamSearchDecoderWrapper::new(
+                ctclib::BeamSearchDecoder::new(options.0, blank_id, pylm::PyLM(lm)),
+            ))),
+        ))
+    }
+}
+
 #[pymodule]
 fn pyctclib(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Decoder>()?;
@@ -149,5 +171,6 @@ fn pyctclib(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<BeamSearchDecoder>()?;
     m.add_class::<BeamSearchDecoderOptions>()?;
     m.add_class::<BeamSearchDecoderWithKenLM>()?;
+    m.add_class::<BeamSearchDecoderWithPyLM>()?;
     Ok(())
 }

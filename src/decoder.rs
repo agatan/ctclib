@@ -175,61 +175,58 @@ impl<T: LM> Decoder<T> {
             for (prev_hyp_idx, prev_hyp) in self.hypothesis[t].iter().enumerate() {
                 let prev_token = prev_hyp.token;
                 let prev_lm_state = &prev_hyp.lm_state;
-                for &target in target_index.iter().take(self.options.beam_size_token) {
-                    let token = target as i32;
-                    let am_score = data[t * tokens + target];
-                    let score = prev_hyp.score + am_score;
+                let states =
+                    target_index
+                        .iter()
+                        .take(self.options.beam_size_token)
+                        .map(|&target| {
+                            let token = target as i32;
+                            let am_score = data[t * tokens + target];
+                            let score = prev_hyp.score + am_score;
 
-                    if token != self.blank && (token != prev_token || prev_hyp.prev_blank) {
-                        // New token
-                        let (lm_state, lm_score) = self.lm.score(prev_lm_state, token);
-                        add_candidate(
-                            &mut self.current_candidates,
-                            &mut self.current_best_score,
-                            self.options.beam_threshold,
-                            DecoderState {
-                                score: score + self.options.lm_weight * lm_score,
-                                token,
-                                prev_blank: false,
-                                am_score: prev_hyp.am_score + am_score,
-                                lm_score: prev_hyp.lm_score + lm_score,
-                                parent_index: prev_hyp_idx as isize,
-                                lm_state,
-                            },
-                        );
-                    } else if token == self.blank {
-                        // Blank
-                        add_candidate(
-                            &mut self.current_candidates,
-                            &mut self.current_best_score,
-                            self.options.beam_threshold,
-                            DecoderState {
-                                score,
-                                token,
-                                prev_blank: true,
-                                am_score: prev_hyp.am_score + am_score,
-                                lm_score: prev_hyp.lm_score,
-                                parent_index: prev_hyp_idx as isize,
-                                lm_state: prev_lm_state.clone(),
-                            },
-                        );
-                    } else {
-                        // Extend
-                        add_candidate(
-                            &mut self.current_candidates,
-                            &mut self.current_best_score,
-                            self.options.beam_threshold,
-                            DecoderState {
-                                score,
-                                token,
-                                prev_blank: false,
-                                am_score: prev_hyp.am_score + am_score,
-                                lm_score: prev_hyp.lm_score,
-                                parent_index: prev_hyp_idx as isize,
-                                lm_state: prev_lm_state.clone(),
-                            },
-                        );
-                    }
+                            if token != self.blank && (token != prev_token || prev_hyp.prev_blank) {
+                                // New token
+                                let (lm_state, lm_score) = self.lm.score(prev_lm_state, token);
+                                DecoderState {
+                                    score: score + self.options.lm_weight * lm_score,
+                                    token,
+                                    prev_blank: false,
+                                    am_score: prev_hyp.am_score + am_score,
+                                    lm_score: prev_hyp.lm_score + lm_score,
+                                    parent_index: prev_hyp_idx as isize,
+                                    lm_state,
+                                }
+                            } else if token == self.blank {
+                                // Blank
+                                DecoderState {
+                                    score,
+                                    token,
+                                    prev_blank: true,
+                                    am_score: prev_hyp.am_score + am_score,
+                                    lm_score: prev_hyp.lm_score,
+                                    parent_index: prev_hyp_idx as isize,
+                                    lm_state: prev_lm_state.clone(),
+                                }
+                            } else {
+                                // Extend
+                                DecoderState {
+                                    score,
+                                    token,
+                                    prev_blank: false,
+                                    am_score: prev_hyp.am_score + am_score,
+                                    lm_score: prev_hyp.lm_score,
+                                    parent_index: prev_hyp_idx as isize,
+                                    lm_state: prev_lm_state.clone(),
+                                }
+                            }
+                        });
+                for state in states {
+                    add_candidate(
+                        &mut self.current_candidates,
+                        &mut self.current_best_score,
+                        self.options.beam_threshold,
+                        state,
+                    )
                 }
             }
             // Finalize candidates.

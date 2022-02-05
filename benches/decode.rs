@@ -1,7 +1,7 @@
 use std::io::BufRead;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use ctclib::{BeamSearchDecoder, BeamSearchDecoderOptions, Decoder, ZeroLM};
+use ctclib::{BeamSearchDecoder, BeamSearchDecoderOptions, Decoder, GreedyDecoder, ZeroLM};
 
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -37,6 +37,10 @@ fn decoder_options() -> BeamSearchDecoderOptions {
 fn criterion_benchmark(c: &mut Criterion) {
     let (steps, n_vocab, data) = load_logits();
     let blank = (n_vocab - 1) as i32;
+    let mut decoder = GreedyDecoder;
+    c.bench_function("GreedyDecoder", |b| {
+        b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab))
+    });
     let mut decoder = BeamSearchDecoder::new(decoder_options(), blank, ZeroLM::new(n_vocab));
     c.bench_function("ZeroLM", |b| {
         #[cfg(feature = "dhat-heap")]

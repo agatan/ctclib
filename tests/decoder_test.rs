@@ -1,6 +1,8 @@
 use std::io::BufRead;
 
-use ctclib::{Decoder, DecoderOptions, Dict, KenLM, ZeroLM};
+use ctclib::{
+    BeamSearchDecoder, BeamSearchDecoderOptions, Decoder, Dict, GreedyDecoder, KenLM, ZeroLM,
+};
 
 fn load_logits() -> (usize, usize, Vec<f32>) {
     let file = std::io::BufReader::new(std::fs::File::open("data/logit.txt").unwrap());
@@ -30,16 +32,7 @@ fn greedy_decoder_decodes_sequence_greedy() {
     let (steps, n_vocab, data) = load_logits();
     let vocab = load_letter_dicts();
     let blank = (n_vocab - 1) as i32;
-    let mut decoder = Decoder::new(
-        DecoderOptions {
-            beam_size: 1,
-            beam_size_token: 2000000,
-            beam_threshold: f32::MAX,
-            lm_weight: 0.0,
-        },
-        blank,
-        ZeroLM::new(n_vocab),
-    );
+    let mut decoder = GreedyDecoder;
     let outputs = decoder.decode(&data, steps, n_vocab);
     let output = &outputs[0];
     let tokens = output.reduced_tokens(blank);
@@ -56,8 +49,8 @@ fn beam_search_decoder_decodes_sequence() {
     let (steps, n_vocab, data) = load_logits();
     let vocab = load_letter_dicts();
     let blank = (n_vocab - 1) as i32;
-    let mut decoder = Decoder::new(
-        DecoderOptions {
+    let mut decoder = BeamSearchDecoder::new(
+        BeamSearchDecoderOptions {
             beam_size: 100,
             beam_size_token: 2000000,
             beam_threshold: f32::MAX,
@@ -83,8 +76,8 @@ fn beam_search_decoder_decodes_sequence_with_kenlm() {
     let vocab = load_letter_dicts();
     let blank = (n_vocab - 1) as i32;
     let dict = Dict::read("data/letter.dict").unwrap();
-    let mut decoder = Decoder::new(
-        DecoderOptions {
+    let mut decoder = BeamSearchDecoder::new(
+        BeamSearchDecoderOptions {
             beam_size: 100,
             beam_size_token: 2000000,
             beam_threshold: f32::MAX,

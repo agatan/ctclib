@@ -1,7 +1,8 @@
 mod beamsearch;
+mod greedy;
 
 pub use beamsearch::{BeamSearchDecoder, BeamSearchDecoderOptions};
-
+pub use greedy::GreedyDecoder;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DecoderOutput {

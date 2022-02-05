@@ -9,7 +9,7 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 #[test]
 fn test_works() {
-use std::ffi::CString;
+    use std::ffi::CString;
     unsafe {
         let mut config = lm_ngram_Config::new();
         lm_ngram_Config_Config(&mut config as *mut _);

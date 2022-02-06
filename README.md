@@ -1,5 +1,8 @@
 # ctclib
 
+[![ctclib at crates.io](https://img.shields.io/crates/v/ctclib.svg)](https://crates.io/crates/ctclib)
+[![.github/workflows/ci.yml](https://github.com/agatan/ctclib/actions/workflows/ci.yml/badge.svg)](https://github.com/agatan/ctclib/actions/workflows/ci.yml)
+
 **NOTE: This is currently under development.**
 
 A collection of utilities related to CTC, with the goal of being fast and highly flexible.  

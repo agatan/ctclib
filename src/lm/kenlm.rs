@@ -44,10 +44,10 @@ impl Model {
         )
     }
 
-    fn null_context(&self) -> KenLMState {
+    fn begin_context(&self) -> KenLMState {
         let mut state = KenLMState::new();
         state.with_mut_ptr(|ptr| unsafe {
-            kenlm_sys::lm_base_Model_NullContextWrite(self.0, ptr as *mut _)
+            kenlm_sys::lm_base_Model_BeginSentenceWrite(self.0, ptr as *mut _)
         });
         state
     }
@@ -103,11 +103,11 @@ fn load_model_and_get_vocab() {
     assert_eq!(vocab.index("M"), 3);
     assert_eq!(vocab.index("I"), 4);
 
-    let null_context = model.null_context();
-    let (next_context, score) = model.base_score(&null_context, vocab.index("M"));
-    assert_eq!(score, -1.3728311);
+    let begin_context = model.begin_context();
+    let (next_context, score) = model.base_score(&begin_context, vocab.index("M"));
+    assert_eq!(score, -0.045306083);
     let (_, score) = model.base_score(&next_context, model.vocab().index("I"));
-    assert_eq!(score, -0.77655447);
+    assert_eq!(score, -0.019120596);
 
     // Drop explictly.
     std::mem::drop(model);
@@ -147,7 +147,7 @@ impl LM for KenLM {
     type State = KenLMState;
 
     fn start(&mut self) -> LMStateRef<Self::State> {
-        let initial_state = self.model.null_context();
+        let initial_state = self.model.begin_context();
         LMStateRef::new(initial_state)
     }
 

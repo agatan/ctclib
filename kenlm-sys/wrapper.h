@@ -20,6 +20,6 @@ extern "C"
 
     float lm_base_Model_BaseScore(lm::base::Model *model, const void *instate, lm::WordIndex new_word, void *outstate);
     const lm::base::Vocabulary *lm_base_Model_BaseVocabulary(lm::base::Model *model);
-    void lm_base_Model_NullContextWrite(lm::base::Model *model, void *outstate);
+    void lm_base_Model_BeginSentenceWrite(lm::base::Model *model, void *outstate);
     void lm_base_Model_delete(lm::base::Model *model);
 }

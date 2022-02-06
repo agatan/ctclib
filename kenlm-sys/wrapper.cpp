@@ -37,9 +37,9 @@ extern "C"
         return &model->BaseVocabulary();
     }
 
-    void lm_base_Model_NullContextWrite(lm::base::Model *model, void *outstate)
+    void lm_base_Model_BeginSentenceWrite(lm::base::Model *model, void *outstate)
     {
-        model->NullContextWrite(outstate);
+        model->BeginSentenceWrite(outstate);
     }
 
     void lm_base_Model_delete(lm::base::Model *model) {

@@ -8,10 +8,10 @@ fn kenlm_model_works() {
     let mut kenlm = KenLM::new("data/overfit.arpa", &dict);
     let root = kenlm.start();
     let (next_state, score) = kenlm.score(&root, dict.index("M").unwrap(), dict.len());
-    assert_eq!(score, -1.3728311);
+    assert_eq!(score, -0.045306083);
     {
         let (_, score) = kenlm.finish(&next_state);
-        assert_eq!(score, -1.6666714);
+        assert_eq!(score, -2.9529781);
     }
     {
         let (next_state, _) = kenlm.score(&next_state, dict.index("I").unwrap(), dict.len());

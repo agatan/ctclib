@@ -13,7 +13,7 @@ fn load_logits() -> (usize, usize, Vec<f32>) {
     let step = lines.len();
     let mut logits = Vec::new();
     for line in lines {
-        let iter = line.split(" ").map(|x| x.parse::<f32>().unwrap());
+        let iter = line.split(' ').map(|x| x.parse::<f32>().unwrap());
         logits.extend(iter);
     }
     let vocab = logits.len() / step;
@@ -34,13 +34,13 @@ fn criterion_benchmark(c: &mut Criterion) {
     let blank = (n_vocab - 1) as i32;
     let mut decoder = GreedyDecoder;
     c.bench_function("GreedyDecoder", |b| {
-        b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab))
+        b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab, blank))
     });
-    let mut decoder = BeamSearchDecoder::new(decoder_options(), blank, ZeroLM);
+    let mut decoder = BeamSearchDecoder::new(decoder_options(), ZeroLM);
     c.bench_function("ZeroLM", |b| {
         #[cfg(feature = "dhat-heap")]
         let _profiler = dhat::Profiler::new_heap();
-        b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab))
+        b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab, blank))
     });
 }
 
@@ -56,11 +56,10 @@ fn criterion_benchmark_kenlm(c: &mut Criterion) {
             lm_weight: 0.5,
             ..decoder_options()
         },
-        blank,
         KenLM::new("data/overfit.arpa", &dict),
     );
     c.bench_function("KenLM", |b| {
-        b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab))
+        b.iter(|| decoder.decode(black_box(&data), black_box(steps), n_vocab, blank))
     });
 }
 

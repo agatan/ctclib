@@ -1,5 +1,6 @@
 import time
 import contextlib
+import os
 
 import numpy as np
 
@@ -33,52 +34,58 @@ class LM:
 
 
 def read_sample():
-    return np.loadtxt("../../data/logit.txt").astype(np.float32)
+    return np.loadtxt(
+        os.path.join(
+            os.path.dirname(__file__), "..", "..", "data", "logit.txt"
+        )
+    ).astype(np.float32)
 
 
 def read_vocab():
-    with open("../../data/letter.dict", "r") as fp:
+    with open(os.path.join(os.path.dirname(__file__), "..", "..", "data", "letter.dict")) as fp:
         return [x.strip() for x in fp.readlines()]
-
-
-def decode_ctc(tokens, blank):
-    prev = blank
-    for token in tokens:
-        if token != blank and token != prev:
-            yield token
-        prev = token
 
 data = read_sample()
 n_vocab = data.shape[-1]
 vocab = read_vocab()
+blank = n_vocab - 1
 assert n_vocab == len(vocab) + 1
 
 decoder = pyctclib.GreedyDecoder()
 with timer("GreedyDecoder"):
-    print("".join([vocab[i] for i in decode_ctc(decoder.decode(data)[0].tokens, n_vocab - 1)]))
+    output = decoder.decode(data, blank)[0]
+result = "".join([vocab[i] for i in output.tokens])
+print(result)
+assert result == "MISTE|QUILTER|T|IS|TH|E|APOSTLESR|OF|THE|RIDDLE|CLASHES|AND|WEHARE|GOLADB|TO|WELCOME|HIS|GOSUPEL|N|"
 
 decoder = pyctclib.BeamSearchDecoder(
     pyctclib.BeamSearchDecoderOptions(100, 1000, 1000, 0.5),
-    n_vocab - 1,
 )
 with timer("BeamSearchDecoder"):
-    print("".join([vocab[i] for i in decode_ctc(decoder.decode(data)[0].tokens, n_vocab - 1)]))
+    output = decoder.decode(data, blank)[0]
+result = "".join([vocab[i] for i in output.tokens])
+print(result)
+assert result == "MISTE|QUILTER|T|IS|TH|E|APOSTLESR|OF|THE|RIDDLE|CLASHES|AND|WEHARE|GOLADB|TO|WELCOME|HIS|GOSPEL|N|"
 
 
 lm = LM()
 decoder = pyctclib.BeamSearchDecoderWithPyLM(
     pyctclib.BeamSearchDecoderOptions(100, 1000, 1000, 0.5),
-    n_vocab - 1,
     lm,
 )
 with timer("BeamSearchDecoderWithPyLM"):
-    print("".join([vocab[i] for i in decode_ctc(decoder.decode(data)[0].tokens, n_vocab - 1)]))
+    output = decoder.decode(data, blank)[0]
+result = "".join([vocab[i] for i in output.tokens])
+print(result)
+assert result == "MISTE|QUILTER|T|IS|TH|E|APOSTLESR|OF|THE|RIDDLE|CLASHES|AND|WEHARE|GOLADB|TO|WELCOME|HIS|GOSPEL|N|"
 
 decoder = pyctclib.BeamSearchDecoderWithKenLM(
     pyctclib.BeamSearchDecoderOptions(100, 1000, 1000, 0.5),
-    n_vocab - 1,
-    "../../data/overfit.arpa",
+    os.path.join(os.path.dirname(__file__), "..", "..", "data", "overfit.arpa"),
     vocab,
 )
 with timer("BeamSearchDecoderWithKenLM"):
-    print("".join([vocab[i] for i in decode_ctc(decoder.decode(data)[0].tokens, n_vocab - 1)]))
+    output = decoder.decode(data, blank)[0]
+result = "".join([vocab[i] for i in output.tokens])
+print(result)
+assert result == "MISTE|QUILTER|T|IS|THE|APOSTLES|OF|THE|RIDDLE|CLASHES|AND|WEHARE|GOLAD|TO|WECOME|HIS|GOSPEL|"

@@ -10,7 +10,7 @@ fn load_logits() -> (usize, usize, Vec<f32>) {
     let step = lines.len();
     let mut logits = Vec::new();
     for line in lines {
-        let iter = line.split(" ").map(|x| x.parse::<f32>().unwrap());
+        let iter = line.split(' ').map(|x| x.parse::<f32>().unwrap());
         logits.extend(iter);
     }
     let vocab = logits.len() / step;
@@ -28,7 +28,7 @@ fn greedy_decoder_decodes_sequence_greedy() {
     let vocab = load_letter_dicts();
     let blank = (n_vocab - 1) as i32;
     let mut decoder = GreedyDecoder;
-    let outputs = decoder.decode(&data, steps, n_vocab);
+    let outputs = decoder.decode(&data, steps, n_vocab,blank);
     let output = &outputs[0];
     let tokens = output.reduced_tokens(blank);
     let text = tokens
@@ -51,10 +51,9 @@ fn beam_search_decoder_decodes_sequence() {
             beam_threshold: f32::MAX,
             lm_weight: 0.0,
         },
-        blank,
         ZeroLM,
     );
-    let outputs = decoder.decode(&data, steps, n_vocab);
+    let outputs = decoder.decode(&data, steps, n_vocab, blank);
     let output = &outputs[0];
     let tokens = output.reduced_tokens(blank);
     let text = tokens
@@ -78,10 +77,9 @@ fn beam_search_decoder_decodes_sequence_with_kenlm() {
             beam_threshold: f32::MAX,
             lm_weight: 0.5,
         },
-        blank,
         KenLM::new("data/overfit.arpa", &dict),
     );
-    let outputs = decoder.decode(&data, steps, n_vocab);
+    let outputs = decoder.decode(&data, steps, n_vocab, blank);
     let output = &outputs[0];
     let tokens = output.reduced_tokens(blank);
     let text = tokens

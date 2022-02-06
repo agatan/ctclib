@@ -53,8 +53,6 @@ pub struct BeamSearchDecoder<T: LM> {
     current_candidates: Vec<DecoderState<T::State>>,
     current_best_score: f32,
     current_candidate_pointers: Vec<usize>,
-    /// blank_index is the index of the blank token.
-    blank: i32,
     /// hypothesis for each time step.
     hypothesis: Vec<Vec<DecoderState<T::State>>>,
     /// The language model.
@@ -62,37 +60,42 @@ pub struct BeamSearchDecoder<T: LM> {
 }
 
 impl<T: LM> Decoder for BeamSearchDecoder<T> {
-    fn decode(&mut self, data: &[f32], steps: usize, tokens: usize) -> Vec<DecoderOutput> {
-        self.decode_begin();
-        self.decode_step(data, steps, tokens);
-        self.decode_end(steps);
-        let mut outputs = self.get_all_hypothesis(steps);
+    fn decode(
+        &mut self,
+        data: &[f32],
+        steps: usize,
+        tokens: usize,
+        blank_id: i32,
+    ) -> Vec<DecoderOutput> {
+        self.decode_begin(blank_id);
+        self.decode_step(data, steps, tokens, blank_id);
+        self.decode_end(steps, blank_id);
+        let mut outputs = self.get_all_hypothesis(steps, blank_id);
         outputs.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap().reverse());
         outputs
     }
 }
 
 impl<T: LM> BeamSearchDecoder<T> {
-    pub fn new(options: BeamSearchDecoderOptions, blank: i32, lm: T) -> Self {
+    pub fn new(options: BeamSearchDecoderOptions, lm: T) -> Self {
         Self {
             options,
             current_candidates: Vec::new(),
             current_best_score: f32::MIN,
             current_candidate_pointers: Vec::new(),
-            blank,
             hypothesis: Vec::new(),
             lm,
         }
     }
 
-    fn decode_begin(&mut self) {
+    fn decode_begin(&mut self, blank_id: i32) {
         self.reset_candidate();
         let initial_state = self.lm.start();
         self.hypothesis.clear();
         self.hypothesis.push(Vec::new());
         self.hypothesis[0].push(DecoderState {
             score: 0.0,
-            token: self.blank,
+            token: blank_id,
             prev_blank: false,
             am_score: 0.0,
             lm_score: 0.0,
@@ -101,7 +104,7 @@ impl<T: LM> BeamSearchDecoder<T> {
         });
     }
 
-    fn decode_step(&mut self, data: &[f32], steps: usize, n_vocab: usize) {
+    fn decode_step(&mut self, data: &[f32], steps: usize, n_vocab: usize, blank_id: i32) {
         // Reserve hypothesis buffer.
         while self.hypothesis.len() < steps + 2 {
             self.hypothesis
@@ -133,7 +136,7 @@ impl<T: LM> BeamSearchDecoder<T> {
                             let am_score = data[t * n_vocab + target];
                             let score = prev_hyp.score + am_score;
 
-                            if token != self.blank && (token != prev_token || prev_hyp.prev_blank) {
+                            if token != blank_id && (token != prev_token || prev_hyp.prev_blank) {
                                 // New token
                                 let (lm_state, lm_score) =
                                     self.lm.score(prev_lm_state, token, n_vocab);
@@ -141,18 +144,18 @@ impl<T: LM> BeamSearchDecoder<T> {
                                     score: score + self.options.lm_weight * lm_score,
                                     token,
                                     prev_blank: false,
-                                    am_score: prev_hyp.am_score + am_score,
-                                    lm_score: prev_hyp.lm_score + lm_score,
+                                    am_score,
+                                    lm_score,
                                     parent_index: prev_hyp_idx as isize,
                                     lm_state,
                                 }
-                            } else if token == self.blank {
+                            } else if token == blank_id {
                                 // Blank
                                 DecoderState {
                                     score,
                                     token,
                                     prev_blank: true,
-                                    am_score: prev_hyp.am_score + am_score,
+                                    am_score,
                                     lm_score: prev_hyp.lm_score,
                                     parent_index: prev_hyp_idx as isize,
                                     lm_state: prev_lm_state.clone(),
@@ -163,7 +166,7 @@ impl<T: LM> BeamSearchDecoder<T> {
                                     score,
                                     token,
                                     prev_blank: false,
-                                    am_score: prev_hyp.am_score + am_score,
+                                    am_score,
                                     lm_score: prev_hyp.lm_score,
                                     parent_index: prev_hyp_idx as isize,
                                     lm_state: prev_lm_state.clone(),
@@ -184,7 +187,7 @@ impl<T: LM> BeamSearchDecoder<T> {
         }
     }
 
-    fn decode_end(&mut self, steps: usize) {
+    fn decode_end(&mut self, steps: usize, blank_id: i32) {
         self.reset_candidate();
         for (prev_hyp_idx, prev_hyp) in self.hypothesis[steps].iter().enumerate() {
             let prev_lm_state = &prev_hyp.lm_state;
@@ -195,7 +198,7 @@ impl<T: LM> BeamSearchDecoder<T> {
                 self.options.beam_threshold,
                 DecoderState {
                     score: prev_hyp.score + self.options.lm_weight * lm_score,
-                    token: self.blank,
+                    token: blank_id,
                     prev_blank: false,
                     am_score: prev_hyp.am_score,
                     lm_score: prev_hyp.lm_score + lm_score,
@@ -281,21 +284,31 @@ impl<T: LM> BeamSearchDecoder<T> {
         }
     }
 
-    fn get_all_hypothesis(&self, final_step: usize) -> Vec<DecoderOutput> {
+    fn get_all_hypothesis(&self, final_step: usize, blank_id: i32) -> Vec<DecoderOutput> {
         self.hypothesis[final_step + 1]
             .iter()
             .map(|hyp| {
-                let mut output = DecoderOutput::reserved(final_step + 1);
+                let mut output = DecoderOutput::new();
                 output.score = hyp.score;
-                output.am_score = hyp.am_score;
-                output.lm_score = hyp.lm_score;
+                let mut hyps = Vec::with_capacity(final_step + 1);
                 let mut hyp_ = hyp;
                 for i in (0..final_step + 1).rev() {
-                    output.tokens[i] = hyp_.token;
+                    hyps.push(hyp_.clone());
                     hyp_ = &self.hypothesis[i][hyp_.parent_index as usize];
                     if hyp_.parent_index == -1 {
                         break;
                     }
+                }
+                let mut last_token = blank_id;
+                for (step, hyp) in hyps.into_iter().rev().enumerate() {
+                    let token = hyp.token;
+                    if last_token != token && token != blank_id {
+                        output.tokens.push(token);
+                        output.timesteps.push(step);
+                        output.am_scores.push(hyp.am_score);
+                        output.lm_scores.push(hyp.lm_score);
+                    }
+                    last_token = token;
                 }
                 output
             })
@@ -329,7 +342,7 @@ mod tests {
             beam_threshold: f32::MAX,
             lm_weight: 0.0,
         };
-        let mut decoder = BeamSearchDecoder::new(options, 4, ZeroLM);
+        let mut decoder = BeamSearchDecoder::new(options, ZeroLM);
         let steps = 3;
         let tokens = 4;
         #[rustfmt::skip]
@@ -338,15 +351,16 @@ mod tests {
             1.0, 0.0, 0.0, 0.0,
             0.0, 2.0, 0.0, 0.0,
         ];
-        let outputs = decoder.decode(data, steps, tokens);
+        let outputs = decoder.decode(data, steps, tokens, 3);
         assert_eq!(outputs.len(), 1);
         assert_eq!(
             outputs[0],
             DecoderOutput {
                 score: 4.0,
-                am_score: 4.0,
-                lm_score: 0.0,
-                tokens: vec![0, 0, 1, 4],
+                tokens: vec![0, 1],
+                timesteps: vec![0, 2],
+                am_scores: vec![1.0, 2.0],
+                lm_scores: vec![0.0, 0.0],
             }
         )
     }

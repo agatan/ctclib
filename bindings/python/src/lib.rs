@@ -26,7 +26,7 @@ impl BeamSearchDecoderOptions {
 #[pyproto]
 impl PyObjectProtocol for BeamSearchDecoderOptions {
     fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self.0,).into())
+        Ok(format!("{:?}", self.0,))
     }
 }
 
@@ -41,20 +41,30 @@ impl DecoderOutput {
     }
 
     #[getter]
-    fn am_score(&self) -> f32 {
-        self.0.am_score
+    fn am_scores(&self) -> Vec<f32> {
+        self.0.am_scores.clone()
+    }
+
+    #[getter]
+    fn lm_scores(&self) -> Vec<f32> {
+        self.0.lm_scores.clone()
     }
 
     #[getter]
     fn tokens(&self) -> Vec<i32> {
         self.0.tokens.clone()
     }
+
+    #[getter]
+    fn timesteps(&self) -> Vec<usize> {
+        self.0.timesteps.clone()
+    }
 }
 
 #[pyproto]
 impl PyObjectProtocol for DecoderOutput {
     fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self.0,).into())
+        Ok(format!("{:?}", self.0,))
     }
 }
 
@@ -68,15 +78,15 @@ impl Decoder {
         Decoder(Box::new(ctclib::GreedyDecoder))
     }
 
-    fn decode(&mut self, data: &PyArray2<f32>) -> PyResult<Vec<DecoderOutput>> {
+    fn decode(&mut self, data: &PyArray2<f32>, blank_id: i32) -> PyResult<Vec<DecoderOutput>> {
         let (steps, tokens) = data.dims().into_pattern();
         let data = data.readonly();
         let data = data.as_slice()?;
         let outputs = self
             .0
-            .decode(data, steps, tokens)
+            .decode(data, steps, tokens, blank_id)
             .into_iter()
-            .map(|o| DecoderOutput(o))
+            .map(DecoderOutput)
             .collect::<Vec<_>>();
         Ok(outputs)
     }
@@ -102,8 +112,14 @@ impl<T: ctclib::LM> BeamSearchDecoderWrapper<T> {
 }
 
 impl<T: ctclib::LM> ctclib::Decoder for BeamSearchDecoderWrapper<T> {
-    fn decode(&mut self, data: &[f32], steps: usize, tokens: usize) -> Vec<ctclib::DecoderOutput> {
-        self.0.lock().unwrap().decode(data, steps, tokens)
+    fn decode(
+        &mut self,
+        data: &[f32],
+        steps: usize,
+        tokens: usize,
+        blank_id: i32,
+    ) -> Vec<ctclib::DecoderOutput> {
+        self.0.lock().unwrap().decode(data, steps, tokens, blank_id)
     }
 }
 
@@ -115,11 +131,11 @@ struct BeamSearchDecoder;
 #[pymethods]
 impl BeamSearchDecoder {
     #[new]
-    fn new(options: BeamSearchDecoderOptions, blank_id: i32) -> (Self, Decoder) {
+    fn new(options: BeamSearchDecoderOptions) -> (Self, Decoder) {
         (
             BeamSearchDecoder,
             Decoder(Box::new(BeamSearchDecoderWrapper::new(
-                ctclib::BeamSearchDecoder::new(options.0, blank_id, ctclib::ZeroLM),
+                ctclib::BeamSearchDecoder::new(options.0, ctclib::ZeroLM),
             ))),
         )
     }
@@ -133,7 +149,6 @@ impl BeamSearchDecoderWithKenLM {
     #[new]
     fn new(
         options: BeamSearchDecoderOptions,
-        blank_id: i32,
         model_path: &str,
         labels: Vec<String>,
     ) -> PyResult<(Self, Decoder)> {
@@ -143,7 +158,7 @@ impl BeamSearchDecoderWithKenLM {
         Ok((
             BeamSearchDecoderWithKenLM,
             Decoder(Box::new(BeamSearchDecoderWrapper::new(
-                ctclib::BeamSearchDecoder::new(options.0, blank_id, kenlm),
+                ctclib::BeamSearchDecoder::new(options.0, kenlm),
             ))),
         ))
     }
@@ -155,15 +170,11 @@ struct BeamSearchDecoderWithPyLM;
 #[pymethods]
 impl BeamSearchDecoderWithPyLM {
     #[new]
-    fn new(
-        options: BeamSearchDecoderOptions,
-        blank_id: i32,
-        lm: PyObject,
-    ) -> PyResult<(Self, Decoder)> {
+    fn new(options: BeamSearchDecoderOptions, lm: PyObject) -> PyResult<(Self, Decoder)> {
         Ok((
             BeamSearchDecoderWithPyLM,
             Decoder(Box::new(BeamSearchDecoderWrapper::new(
-                ctclib::BeamSearchDecoder::new(options.0, blank_id, pylm::PyLM(lm)),
+                ctclib::BeamSearchDecoder::new(options.0, pylm::PyLM(lm)),
             ))),
         ))
     }

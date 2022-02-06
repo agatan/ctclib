@@ -14,7 +14,10 @@ impl KenLMState {
         Self(unsafe { std::mem::zeroed() })
     }
 
-    fn with_ptr<T: 'static>(&self, f: impl FnOnce(*const ctclib_kenlm_sys::lm_ngram_State) -> T) -> T {
+    fn with_ptr<T: 'static>(
+        &self,
+        f: impl FnOnce(*const ctclib_kenlm_sys::lm_ngram_State) -> T,
+    ) -> T {
         f(&self.0 as *const _)
     }
 

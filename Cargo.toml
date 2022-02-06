@@ -7,7 +7,7 @@ license = "MIT"
 repository = "https://github.com/agatan/ctclib"
 description = "A collection of utilities related to CTC, with the goal of being fast and highly flexible."
 readme = "README.md"
-categories = ["science", "mathematics", "algolithms"]
+categories = ["science", "mathematics", "algorithms"]
 keywords = ["ctc", "beam-search"]
 
 [[bench]]

@@ -39,5 +39,11 @@ impl DecoderOutput {
 
 /// Decoder is a trait for decoding a ctc sequence of tokens.
 pub trait Decoder {
-    fn decode(&mut self, data: &[f32], steps: usize, tokens: usize, blank_id: i32) -> Vec<DecoderOutput>;
+    fn decode(
+        &mut self,
+        data: &[f32],
+        steps: usize,
+        tokens: usize,
+        blank_id: i32,
+    ) -> Vec<DecoderOutput>;
 }

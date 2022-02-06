@@ -28,7 +28,7 @@ fn greedy_decoder_decodes_sequence_greedy() {
     let vocab = load_letter_dicts();
     let blank = (n_vocab - 1) as i32;
     let mut decoder = GreedyDecoder;
-    let outputs = decoder.decode(&data, steps, n_vocab,blank);
+    let outputs = decoder.decode(&data, steps, n_vocab, blank);
     let output = &outputs[0];
     let tokens = output.reduced_tokens(blank);
     let text = tokens

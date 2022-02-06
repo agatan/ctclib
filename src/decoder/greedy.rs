@@ -4,7 +4,13 @@ use super::{Decoder, DecoderOutput};
 pub struct GreedyDecoder;
 
 impl Decoder for GreedyDecoder {
-    fn decode(&mut self, data: &[f32], steps: usize, tokens: usize, blank_id: i32) -> Vec<DecoderOutput> {
+    fn decode(
+        &mut self,
+        data: &[f32],
+        steps: usize,
+        tokens: usize,
+        blank_id: i32,
+    ) -> Vec<DecoderOutput> {
         let mut output = DecoderOutput::new();
         let mut last_token = blank_id;
         for step in 0..steps {

@@ -51,7 +51,7 @@ vocab = read_vocab()
 blank = n_vocab - 1
 assert n_vocab == len(vocab) + 1
 
-decoder = pyctclib.GreedyDecoder()
+decoder: pyctclib.Decoder = pyctclib.GreedyDecoder()
 with timer("GreedyDecoder"):
     output = decoder.decode(data, blank)[0]
 result = "".join([vocab[i] for i in output.tokens])

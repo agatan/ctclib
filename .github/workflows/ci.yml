@@ -58,6 +58,8 @@ jobs:
         with:
           python-version: '3.9'
       - name: install
-        run: pip install bindings/python
+        run: pip install bindings/python mypy
       - name: test
         run: python bindings/python/test.py
+      - name: typecheck
+        run: mypy bindings/python/test.py

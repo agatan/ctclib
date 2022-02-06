@@ -9,4 +9,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = { version = "0.15.1", features = ["extension-module"] }
+numpy = "0.15"
 ctclib = { version = "*", path = "../.." }

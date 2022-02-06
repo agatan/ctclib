@@ -31,9 +31,9 @@ impl<T> Clone for DecoderState<T> {
 impl<T> DecoderState<T> {
     /// Compare two states by their internal conditions ignoring the scores.
     fn is_same_lm_state(&self, other: &DecoderState<T>) -> bool {
-        return self.lm_state == other.lm_state
+        self.lm_state == other.lm_state
             && self.token == other.token
-            && self.prev_blank == other.prev_blank;
+            && self.prev_blank == other.prev_blank
     }
 }
 

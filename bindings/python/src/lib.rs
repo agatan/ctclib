@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 
+use numpy::{array::PyArray2, ndarray::Dimension};
 use pyo3::{exceptions, prelude::*, PyObjectProtocol};
 
 mod pylm;
@@ -67,12 +68,17 @@ impl Decoder {
         Decoder(Box::new(ctclib::GreedyDecoder))
     }
 
-    fn decode(&mut self, data: Vec<f32>, steps: usize, tokens: usize) -> Vec<DecoderOutput> {
-        self.0
-            .decode(&data, steps, tokens)
+    fn decode(&mut self, data: &PyArray2<f32>) -> PyResult<Vec<DecoderOutput>> {
+        let (steps, tokens) = data.dims().into_pattern();
+        let data = data.readonly();
+        let data = data.as_slice()?;
+        let outputs = self
+            .0
+            .decode(data, steps, tokens)
             .into_iter()
             .map(|o| DecoderOutput(o))
-            .collect()
+            .collect::<Vec<_>>();
+        Ok(outputs)
     }
 }
 

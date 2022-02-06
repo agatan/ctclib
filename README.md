@@ -40,6 +40,7 @@ ctclib = { version = "*", git = "https://github.com/agatan/ctclib" }
 
 `ctclib` provides python interfaces, named `pyctclib`.
 Currently, `pyctclib` isn't available on PyPI, but you can install this as git dependency.
+Ensure that you have installed `cargo` and `libclang-dev`.
 
 ```sh
 pip install 'git+https://github.com/agatan/ctclib.git#egg=pyctclib&subdirectory=bindings/python'

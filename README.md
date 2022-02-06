@@ -50,3 +50,22 @@ pip install 'git+https://github.com/agatan/ctclib.git#egg=pyctclib&subdirectory=
 
 - [ctc decoder in python](./bindings/python/test.py)
 - [ctc decoder in rust](./benches/decode.rs)
+
+```python
+import pyctclib
+
+decoder = pyctclib.BeamSearchDecoderWithKenLM(
+    pyctclib.BeamSearchDecoderOptions(
+      beam_size=100,
+      beam_size_token=1000,
+      beam_threshold=1,
+      lm_weight=0.5,
+    ),
+    "/path/to/model.arpa",
+    ["a", "b", "c", "_"],
+)
+decode.decode(log_probs)
+
+# or you can use user-defined LM
+# See pyctclib.LMProtocol
+```

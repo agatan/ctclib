@@ -2,6 +2,11 @@
 edition = "2021"
 name = "ctclib"
 version = "0.1.0"
+authors = ["Naomichi Agata <agatan039@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/agatan/ctclib"
+description = "A collection of utilities related to CTC, with the goal of being fast and highly flexible."
+readme = "README.md"
 
 [[bench]]
 harness = false

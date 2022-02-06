@@ -8,7 +8,7 @@ repository = "https://github.com/agatan/ctclib"
 description = "A collection of utilities related to CTC, with the goal of being fast and highly flexible."
 readme = "README.md"
 categories = ["science", "mathematics", "algolithms"]
-keywords = ["ctc", "beam search", "connectionist temporal classification"]
+keywords = ["ctc", "beam-search"]
 
 [[bench]]
 harness = false

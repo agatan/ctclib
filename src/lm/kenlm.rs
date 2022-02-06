@@ -4,42 +4,42 @@ use crate::{Dict, LMStateRef};
 
 use super::LM;
 
-pub type KenLMWordIndex = kenlm_sys::lm_WordIndex;
+pub type KenLMWordIndex = ctclib_kenlm_sys::lm_WordIndex;
 
 #[derive(Debug, Clone)]
-pub struct KenLMState(kenlm_sys::lm_ngram_State);
+pub struct KenLMState(ctclib_kenlm_sys::lm_ngram_State);
 
 impl KenLMState {
     fn new() -> Self {
         Self(unsafe { std::mem::zeroed() })
     }
 
-    fn with_ptr<T: 'static>(&self, f: impl FnOnce(*const kenlm_sys::lm_ngram_State) -> T) -> T {
+    fn with_ptr<T: 'static>(&self, f: impl FnOnce(*const ctclib_kenlm_sys::lm_ngram_State) -> T) -> T {
         f(&self.0 as *const _)
     }
 
     fn with_mut_ptr<T: 'static>(
         &mut self,
-        f: impl FnOnce(*mut kenlm_sys::lm_ngram_State) -> T,
+        f: impl FnOnce(*mut ctclib_kenlm_sys::lm_ngram_State) -> T,
     ) -> T {
-        let ptr = &mut self.0 as *mut kenlm_sys::lm_ngram_State;
+        let ptr = &mut self.0 as *mut ctclib_kenlm_sys::lm_ngram_State;
         f(ptr)
     }
 }
 
 /// A wrapper of a KenLM Model.
-struct Model(*mut kenlm_sys::lm_base_Model);
+struct Model(*mut ctclib_kenlm_sys::lm_base_Model);
 
 impl Model {
     fn new<T: AsRef<str>>(path: T) -> Self {
         let x = CString::new(path.as_ref()).unwrap();
-        let model = unsafe { kenlm_sys::lm_ngram_LoadVirtualWithDefaultConfig(x.as_ptr()) };
+        let model = unsafe { ctclib_kenlm_sys::lm_ngram_LoadVirtualWithDefaultConfig(x.as_ptr()) };
         Self(model)
     }
 
     fn vocab(&self) -> Vocabulary {
         Vocabulary(
-            unsafe { kenlm_sys::lm_base_Model_BaseVocabulary(self.0) },
+            unsafe { ctclib_kenlm_sys::lm_base_Model_BaseVocabulary(self.0) },
             self,
         )
     }
@@ -47,7 +47,7 @@ impl Model {
     fn begin_context(&self) -> KenLMState {
         let mut state = KenLMState::new();
         state.with_mut_ptr(|ptr| unsafe {
-            kenlm_sys::lm_base_Model_BeginSentenceWrite(self.0, ptr as *mut _)
+            ctclib_kenlm_sys::lm_base_Model_BeginSentenceWrite(self.0, ptr as *mut _)
         });
         state
     }
@@ -56,7 +56,7 @@ impl Model {
         state.with_ptr(|state_ptr| {
             let mut outstate = KenLMState::new();
             let score = outstate.with_mut_ptr(|out| unsafe {
-                kenlm_sys::lm_base_Model_BaseScore(
+                ctclib_kenlm_sys::lm_base_Model_BaseScore(
                     self.0,
                     state_ptr as *const _,
                     token as u32,
@@ -71,22 +71,22 @@ impl Model {
 impl Drop for Model {
     fn drop(&mut self) {
         unsafe {
-            kenlm_sys::lm_base_Model_delete(self.0);
+            ctclib_kenlm_sys::lm_base_Model_delete(self.0);
         }
     }
 }
 
 /// A wrapper of a reference to KenLM Vocabulary
-struct Vocabulary<'a>(*const kenlm_sys::lm_base_Vocabulary, &'a Model);
+struct Vocabulary<'a>(*const ctclib_kenlm_sys::lm_base_Vocabulary, &'a Model);
 
 impl<'a> Vocabulary<'a> {
     fn end_sentence(&self) -> KenLMWordIndex {
-        unsafe { kenlm_sys::lm_base_Vocabulary_EndSentence(self.0) }
+        unsafe { ctclib_kenlm_sys::lm_base_Vocabulary_EndSentence(self.0) }
     }
 
     fn index(&self, x: &str) -> KenLMWordIndex {
         unsafe {
-            kenlm_sys::lm_base_Vocabulary_Index(
+            ctclib_kenlm_sys::lm_base_Vocabulary_Index(
                 self.0,
                 x.as_ptr() as *const _,
                 x.as_bytes().len() as u64,

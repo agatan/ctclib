@@ -299,17 +299,28 @@ impl<T: LM> BeamSearchDecoder<T> {
         // 4. Copy candidates to output.
         let output = &mut self.hypothesis[t + 1];
         output.clear();
-        for &ptr in self
+        let prev_states = self
             .current_candidate_pointers
             .iter()
             .take(self.options.beam_size)
+            .map(|&ptr| self.current_candidates[ptr].parent_lm_state.as_ref())
+            .collect::<Vec<_>>();
+        let tokens = self
+            .current_candidate_pointers
+            .iter()
+            .take(self.options.beam_size)
+            .map(|&ptr| self.current_candidates[ptr].state.token)
+            .collect::<Vec<_>>();
+        let next_states = self.lm.batch_next_state(&prev_states, &tokens);
+        for (&ptr, next_state) in self
+            .current_candidate_pointers
+            .iter()
+            .take(self.options.beam_size)
+            .zip(next_states)
         {
             let beam = &self.current_candidates[ptr];
-            let lm_state = self
-                .lm
-                .next_state(beam.parent_lm_state.as_ref(), beam.state.token);
             output.push(DecoderHypothesis {
-                lm_state: Some(Rc::new(lm_state)),
+                lm_state: Some(Rc::new(next_state)),
                 decoder_state: beam.state.clone(),
             });
         }

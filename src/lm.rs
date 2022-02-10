@@ -87,6 +87,15 @@ pub trait LM {
     fn score(&mut self, state: &Self::State, token: i32) -> f32;
     // Returns the new state and the score when a token comes as a continuation of LMStateRef.
     fn next_state(&mut self, state: &Self::State, token: i32) -> Self::State;
+    // batched version of `next_state`.
+    fn batch_next_state(&mut self, states: &[&Self::State], tokens: &[i32]) -> Vec<Self::State> {
+        debug_assert_eq!(states.len(), tokens.len());
+        states
+            .iter()
+            .zip(tokens)
+            .map(|(&s, &t)| self.next_state(s, t))
+            .collect()
+    }
     // Returns the new state and the score of the final state.
     fn finish(&mut self, state: &Self::State) -> f32;
 }

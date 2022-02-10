@@ -36,6 +36,21 @@ impl ctclib::LM for PyLM {
         PyLMState(next_pystate)
     }
 
+    fn batch_next_state(&mut self, states: &[&Self::State], tokens: &[i32]) -> Vec<Self::State> {
+        let args = (
+            states.iter().map(|s| s.0.clone()).collect::<Vec<_>>(),
+            tokens.to_owned(),
+        );
+        let next_pystates = Python::with_gil(|py| {
+            self.0
+                .call_method1(py, "batch_next_state", args)
+                .unwrap()
+                .extract::<Vec<PyObject>>(py)
+                .unwrap()
+        });
+        next_pystates.into_iter().map(PyLMState).collect()
+    }
+
     fn finish(&mut self, state: &Self::State) -> f32 {
         Python::with_gil(|py| {
             self.0

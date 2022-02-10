@@ -1,5 +1,4 @@
-import abc
-from typing import List, Generic, TypeVar, Tuple
+from typing import List, Generic, TypeVar
 from typing_extensions import Protocol
 
 import numpy as np
@@ -64,10 +63,13 @@ class LMProtocol(Generic[LMState], Protocol):
     def start(self) -> LMState:
         ...
 
-    def score(self, prev_state: LMState, token: int, n_vocab: int) -> Tuple[LMState, float]:
+    def score(self, prev_state: LMState, token: int) -> float:
         ...
 
-    def finish(self, prev_state: LMState) -> Tuple[LMState, float]:
+    def next_state(self, prev_state: LMState, token: int) -> LMState:
+        ...
+
+    def finish(self, prev_state: LMState) -> float:
         ...
 
 

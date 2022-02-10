@@ -21,16 +21,21 @@ def timer(name):
 class LM:
     def __init__(self):
         self.score_called = 0
+        self.next_state_called = 0
 
     def start(self):
         return None
 
-    def score(self, prev_state, token, _):
+    def score(self, prev_state, token):
         self.score_called += 1
-        return prev_state, 0.0
+        return 0.0
+
+    def next_state(self, prev_state, token):
+        self.next_state_called += 1
+        return prev_state
 
     def finish(self, prev_state):
-        return prev_state, 0.0
+        return 0.0
 
 
 def read_sample():
@@ -49,7 +54,7 @@ data = read_sample()
 n_vocab = data.shape[-1]
 vocab = read_vocab()
 blank = n_vocab - 1
-assert n_vocab == len(vocab) + 1
+assert n_vocab == len(vocab)
 
 decoder: pyctclib.Decoder = pyctclib.GreedyDecoder()
 with timer("GreedyDecoder"):
@@ -78,6 +83,7 @@ with timer("BeamSearchDecoderWithPyLM"):
 result = "".join([vocab[i] for i in output.tokens])
 print(result)
 assert result == "MISTE|QUILTER|T|IS|TH|E|APOSTLESR|OF|THE|RIDDLE|CLASHES|AND|WEHARE|GOLADB|TO|WELCOME|HIS|GOSPEL|N|"
+print(lm.next_state_called, lm.score_called)
 
 decoder = pyctclib.BeamSearchDecoderWithKenLM(
     pyctclib.BeamSearchDecoderOptions(100, 1000, 1000, 0.5),

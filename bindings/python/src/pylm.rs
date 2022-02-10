@@ -10,42 +10,39 @@ pub(crate) struct PyLM(pub PyObject);
 impl ctclib::LM for PyLM {
     type State = PyLMState;
 
-    fn start(&mut self) -> ctclib::LMStateRef<Self::State> {
+    fn start(&mut self) -> Self::State {
         let state = Python::with_gil(|py| self.0.call_method1(py, "start", ()));
-        state
-            .map(|state| ctclib::LMStateRef::new(PyLMState(state)))
-            .unwrap()
+        state.map(PyLMState).unwrap()
     }
 
-    fn score(
-        &mut self,
-        state: &ctclib::LMStateRef<Self::State>,
-        token: i32,
-        n_vocab: usize,
-    ) -> (ctclib::LMStateRef<Self::State>, f32) {
-        let pystate = state.borrow_internal_state().0.clone();
-        let (next_pystate, score): (PyObject, f32) = Python::with_gil(|py| {
+    fn score(&mut self, state: &Self::State, token: i32) -> f32 {
+        Python::with_gil(|py| {
             self.0
-                .call_method1(py, "score", (pystate, token, n_vocab))
+                .call_method1(py, "score", (state.0.clone(), token))
                 .unwrap()
-                .extract::<(PyObject, f32)>(py)
+                .extract::<f32>(py)
                 .unwrap()
-        });
-        (state.child(token, n_vocab, PyLMState(next_pystate)), score)
+        })
     }
 
-    fn finish(
-        &mut self,
-        state: &ctclib::LMStateRef<Self::State>,
-    ) -> (ctclib::LMStateRef<Self::State>, f32) {
-        let pystate = state.borrow_internal_state().0.clone();
-        let (_, score): (PyObject, f32) = Python::with_gil(|py| {
+    fn next_state(&mut self, state: &Self::State, token: i32) -> Self::State {
+        let next_pystate = Python::with_gil(|py| {
             self.0
-                .call_method1(py, "finish", (pystate,))
+                .call_method1(py, "next_state", (state.0.clone(), token))
                 .unwrap()
-                .extract::<(PyObject, f32)>(py)
+                .extract::<PyObject>(py)
                 .unwrap()
         });
-        (state.clone(), score)
+        PyLMState(next_pystate)
+    }
+
+    fn finish(&mut self, state: &Self::State) -> f32 {
+        Python::with_gil(|py| {
+            self.0
+                .call_method1(py, "finish", (state.0.clone(),))
+                .unwrap()
+                .extract::<f32>(py)
+                .unwrap()
+        })
     }
 }

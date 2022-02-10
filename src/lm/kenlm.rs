@@ -1,6 +1,6 @@
 use std::ffi::CString;
 
-use crate::{Dict, LMStateRef};
+use crate::Dict;
 
 use super::LM;
 
@@ -122,12 +122,10 @@ fn load_model_and_get_vocab() {
 pub struct KenLM {
     model: Model,
     idx_to_kenlm_idx: Vec<KenLMWordIndex>,
-    n_vocab: usize,
 }
 
 impl KenLM {
     pub fn new<T: AsRef<str>>(path: T, dict: &Dict) -> Self {
-        // TODO: convert user vocabulary to KenLM's vocabulary
         let model = Model::new(path);
         let vocab = model.vocab();
 
@@ -141,7 +139,6 @@ impl KenLM {
         Self {
             model,
             idx_to_kenlm_idx,
-            n_vocab: dict.len(),
         }
     }
 }
@@ -149,31 +146,28 @@ impl KenLM {
 impl LM for KenLM {
     type State = KenLMState;
 
-    fn start(&mut self) -> LMStateRef<Self::State> {
-        let initial_state = self.model.begin_context();
-        LMStateRef::new(initial_state)
+    fn start(&mut self) -> Self::State {
+        self.model.begin_context()
     }
 
-    fn score(
-        &mut self,
-        state: &LMStateRef<Self::State>,
-        token: i32,
-        n_vocab: usize,
-    ) -> (LMStateRef<Self::State>, f32) {
+    fn score(&mut self, state: &Self::State, token: i32) -> f32 {
         let kenlm_idx = self.idx_to_kenlm_idx[token as usize];
-        let (next_kenlm_state, score) = {
-            self.model
-                .base_score(&state.borrow_internal_state(), kenlm_idx)
-        };
-        let outstate = state.child(token, n_vocab, next_kenlm_state);
-        (outstate, score)
+        let (_next_kenlm_state, score) = { self.model.base_score(state, kenlm_idx) };
+        score
     }
 
-    fn finish(&mut self, state: &LMStateRef<Self::State>) -> (LMStateRef<Self::State>, f32) {
+    fn next_state(&mut self, state: &Self::State, token: i32) -> Self::State {
+        if token == -1 {
+            return self.model.begin_context();
+        }
+        let kenlm_idx = self.idx_to_kenlm_idx[token as usize];
+        let (next_kenlm_state, _score) = { self.model.base_score(state, kenlm_idx) };
+        next_kenlm_state
+    }
+
+    fn finish(&mut self, state: &Self::State) -> f32 {
         let eos = self.model.vocab().end_sentence();
-        let (next_kenlm_state, score) =
-            { self.model.base_score(&state.borrow_internal_state(), eos) };
-        let outstate = state.child(self.n_vocab as i32, self.n_vocab, next_kenlm_state);
-        (outstate, score)
+        let (_next_kenlm_state, score) = { self.model.base_score(state, eos) };
+        score
     }
 }

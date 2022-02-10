@@ -1,20 +1,22 @@
+use std::rc::Rc;
+
 use ordered_float::OrderedFloat;
 
 use super::{Decoder, DecoderOutput};
-use crate::lm::{LMStateRef, LM};
+use crate::lm::{SequenceStateRef, LM};
 
 #[derive(Debug, PartialEq)]
-struct DecoderState<T> {
+struct DecoderState {
     score: f32,
     token: i32,
     prev_blank: bool,
     am_score: f32,
     lm_score: f32,
     parent_index: isize,
-    lm_state: LMStateRef<T>,
+    lm_state: SequenceStateRef,
 }
 
-impl<T> Clone for DecoderState<T> {
+impl Clone for DecoderState {
     fn clone(&self) -> Self {
         Self {
             score: self.score,
@@ -28,13 +30,25 @@ impl<T> Clone for DecoderState<T> {
     }
 }
 
-impl<T> DecoderState<T> {
+impl DecoderState {
     /// Compare two states by their internal conditions ignoring the scores.
-    fn is_same_lm_state(&self, other: &DecoderState<T>) -> bool {
+    fn is_same_lm_state(&self, other: &DecoderState) -> bool {
         self.lm_state == other.lm_state
             && self.token == other.token
             && self.prev_blank == other.prev_blank
     }
+}
+
+#[derive(Debug, Clone)]
+struct DecoderBeam<LMState> {
+    parent_lm_state: Rc<LMState>,
+    state: DecoderState,
+}
+
+#[derive(Debug, Clone)]
+struct DecoderHypothesis<LMState> {
+    lm_state: Rc<LMState>,
+    decoder_state: DecoderState,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -50,11 +64,11 @@ pub struct BeamSearchDecoderOptions {
 pub struct BeamSearchDecoder<T: LM> {
     options: BeamSearchDecoderOptions,
     /// All the new candidates that proposed based on the previous step.
-    current_candidates: Vec<DecoderState<T::State>>,
+    current_candidates: Vec<DecoderBeam<T::State>>,
     current_best_score: f32,
     current_candidate_pointers: Vec<usize>,
     /// hypothesis for each time step.
-    hypothesis: Vec<Vec<DecoderState<T::State>>>,
+    hypothesis: Vec<Vec<DecoderHypothesis<T::State>>>,
     /// The language model.
     lm: T,
 }
@@ -69,7 +83,7 @@ impl<T: LM> Decoder for BeamSearchDecoder<T> {
     ) -> Vec<DecoderOutput> {
         self.decode_begin(blank_id);
         self.decode_step(data, steps, tokens, blank_id);
-        self.decode_end(steps, blank_id);
+        self.decode_end(steps, blank_id, tokens);
         let mut outputs = self.get_all_hypothesis(steps, blank_id);
         outputs.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap().reverse());
         outputs
@@ -93,14 +107,17 @@ impl<T: LM> BeamSearchDecoder<T> {
         let initial_state = self.lm.start();
         self.hypothesis.clear();
         self.hypothesis.push(Vec::new());
-        self.hypothesis[0].push(DecoderState {
-            score: 0.0,
-            token: blank_id,
-            prev_blank: false,
-            am_score: 0.0,
-            lm_score: 0.0,
-            parent_index: -1, /* ROOT */
-            lm_state: initial_state,
+        self.hypothesis[0].push(DecoderHypothesis {
+            lm_state: Rc::new(initial_state),
+            decoder_state: DecoderState {
+                score: 0.0,
+                token: blank_id,
+                prev_blank: false,
+                am_score: 0.0,
+                lm_score: 0.0,
+                parent_index: -1, /* ROOT */
+                lm_state: SequenceStateRef::new(),
+            },
         });
     }
 
@@ -125,8 +142,8 @@ impl<T: LM> BeamSearchDecoder<T> {
             }
             self.reset_candidate();
             for (prev_hyp_idx, prev_hyp) in self.hypothesis[t].iter().enumerate() {
-                let prev_token = prev_hyp.token;
-                let prev_lm_state = &prev_hyp.lm_state;
+                let prev_token = prev_hyp.decoder_state.token;
+                let prev_sequence_state = &prev_hyp.decoder_state.lm_state;
                 let states =
                     target_index
                         .iter()
@@ -134,12 +151,13 @@ impl<T: LM> BeamSearchDecoder<T> {
                         .map(|&target| {
                             let token = target as i32;
                             let am_score = data[t * n_vocab + target];
-                            let score = prev_hyp.score + am_score;
+                            let score = prev_hyp.decoder_state.score + am_score;
 
-                            if token != blank_id && (token != prev_token || prev_hyp.prev_blank) {
+                            if token != blank_id
+                                && (token != prev_token || prev_hyp.decoder_state.prev_blank)
+                            {
                                 // New token
-                                let (lm_state, lm_score) =
-                                    self.lm.score(prev_lm_state, token, n_vocab);
+                                let lm_score = self.lm.score(prev_hyp.lm_state.as_ref(), token);
                                 DecoderState {
                                     score: score + self.options.lm_weight * lm_score,
                                     token,
@@ -147,7 +165,7 @@ impl<T: LM> BeamSearchDecoder<T> {
                                     am_score,
                                     lm_score,
                                     parent_index: prev_hyp_idx as isize,
-                                    lm_state,
+                                    lm_state: prev_sequence_state.child(token, n_vocab),
                                 }
                             } else if token == blank_id {
                                 // Blank
@@ -156,9 +174,9 @@ impl<T: LM> BeamSearchDecoder<T> {
                                     token,
                                     prev_blank: true,
                                     am_score,
-                                    lm_score: prev_hyp.lm_score,
+                                    lm_score: prev_hyp.decoder_state.lm_score,
                                     parent_index: prev_hyp_idx as isize,
-                                    lm_state: prev_lm_state.clone(),
+                                    lm_state: prev_sequence_state.clone(),
                                 }
                             } else {
                                 // Extend
@@ -167,9 +185,9 @@ impl<T: LM> BeamSearchDecoder<T> {
                                     token,
                                     prev_blank: false,
                                     am_score,
-                                    lm_score: prev_hyp.lm_score,
+                                    lm_score: prev_hyp.decoder_state.lm_score,
                                     parent_index: prev_hyp_idx as isize,
-                                    lm_state: prev_lm_state.clone(),
+                                    lm_state: prev_sequence_state.clone(),
                                 }
                             }
                         });
@@ -178,6 +196,7 @@ impl<T: LM> BeamSearchDecoder<T> {
                         &mut self.current_candidates,
                         &mut self.current_best_score,
                         self.options.beam_threshold,
+                        prev_hyp.lm_state.clone(),
                         state,
                     )
                 }
@@ -187,23 +206,24 @@ impl<T: LM> BeamSearchDecoder<T> {
         }
     }
 
-    fn decode_end(&mut self, steps: usize, blank_id: i32) {
+    fn decode_end(&mut self, steps: usize, blank_id: i32, n_vocab: usize) {
         self.reset_candidate();
         for (prev_hyp_idx, prev_hyp) in self.hypothesis[steps].iter().enumerate() {
-            let prev_lm_state = &prev_hyp.lm_state;
-            let (lm_state, lm_score) = self.lm.finish(prev_lm_state);
+            let prev_sequence_state = &prev_hyp.decoder_state.lm_state;
+            let lm_score = self.lm.finish(prev_hyp.lm_state.as_ref());
             add_candidate(
                 &mut self.current_candidates,
                 &mut self.current_best_score,
                 self.options.beam_threshold,
+                prev_hyp.lm_state.clone(),
                 DecoderState {
-                    score: prev_hyp.score + self.options.lm_weight * lm_score,
+                    score: prev_hyp.decoder_state.score + self.options.lm_weight * lm_score,
                     token: blank_id,
                     prev_blank: false,
-                    am_score: prev_hyp.am_score,
-                    lm_score: prev_hyp.lm_score + lm_score,
+                    am_score: prev_hyp.decoder_state.am_score,
+                    lm_score: prev_hyp.decoder_state.lm_score + lm_score,
                     parent_index: prev_hyp_idx as isize,
-                    lm_state,
+                    lm_state: prev_sequence_state.child(-1, n_vocab),
                 },
             );
         }
@@ -222,7 +242,7 @@ impl<T: LM> BeamSearchDecoder<T> {
         // 1. Gather valid candidates.
         // ================================================================
         for (i, candidate) in self.current_candidates.iter().enumerate() {
-            if candidate.score > self.current_best_score - self.options.beam_threshold {
+            if candidate.state.score > self.current_best_score - self.options.beam_threshold {
                 self.current_candidate_pointers.push(i);
             }
         }
@@ -231,14 +251,17 @@ impl<T: LM> BeamSearchDecoder<T> {
         // ================================================================
         // Sort candidates so that the same patterns are consecutive.
         self.current_candidate_pointers.sort_by_key(|a| {
-            let x = &self.current_candidates[*a];
+            let x = &self.current_candidates[*a].state;
             (&x.lm_state, x.token, x.prev_blank, OrderedFloat(x.score))
         });
         let mut n_candidates_after_merged = 1;
         let mut last_ptr = self.current_candidate_pointers[0];
         for i in 1..self.current_candidate_pointers.len() {
             let ptr = self.current_candidate_pointers[i];
-            if !self.current_candidates[ptr].is_same_lm_state(&self.current_candidates[last_ptr]) {
+            if !self.current_candidates[ptr]
+                .state
+                .is_same_lm_state(&self.current_candidates[last_ptr].state)
+            {
                 // Distinct pattern.
                 self.current_candidate_pointers[n_candidates_after_merged] = ptr;
                 n_candidates_after_merged += 1;
@@ -254,9 +277,9 @@ impl<T: LM> BeamSearchDecoder<T> {
                         (&mut tail[0], &mut head[ptr])
                     }
                 };
-                let max_score = last.score.max(current.score);
-                let min_score = last.score.min(current.score);
-                last.score =
+                let max_score = last.state.score.max(current.state.score);
+                let min_score = last.state.score.min(current.state.score);
+                last.state.score =
                     max_score + libm::log1p(libm::exp(min_score as f64 - max_score as f64)) as f32;
             }
         }
@@ -268,7 +291,7 @@ impl<T: LM> BeamSearchDecoder<T> {
             pdqselect::select_by_key(
                 &mut self.current_candidate_pointers,
                 self.options.beam_size,
-                |&x| OrderedFloat(-self.current_candidates[x].score),
+                |&x| OrderedFloat(-self.current_candidates[x].state.score),
             );
         }
 
@@ -280,7 +303,14 @@ impl<T: LM> BeamSearchDecoder<T> {
             .iter()
             .take(self.options.beam_size)
         {
-            output.push(self.current_candidates[ptr].clone());
+            let beam = &self.current_candidates[ptr];
+            let lm_state = self
+                .lm
+                .next_state(beam.parent_lm_state.as_ref(), beam.state.token);
+            output.push(DecoderHypothesis {
+                lm_state: Rc::new(lm_state),
+                decoder_state: beam.state.clone(),
+            });
         }
     }
 
@@ -289,24 +319,24 @@ impl<T: LM> BeamSearchDecoder<T> {
             .iter()
             .map(|hyp| {
                 let mut output = DecoderOutput::new();
-                output.score = hyp.score;
+                output.score = hyp.decoder_state.score;
                 let mut hyps = Vec::with_capacity(final_step + 1);
                 let mut hyp_ = hyp;
                 for i in (0..final_step + 1).rev() {
-                    hyps.push(hyp_.clone());
-                    hyp_ = &self.hypothesis[i][hyp_.parent_index as usize];
-                    if hyp_.parent_index == -1 {
+                    hyps.push(hyp_);
+                    hyp_ = &self.hypothesis[i][hyp_.decoder_state.parent_index as usize];
+                    if hyp_.decoder_state.parent_index == -1 {
                         break;
                     }
                 }
                 let mut last_token = blank_id;
                 for (step, hyp) in hyps.into_iter().rev().enumerate() {
-                    let token = hyp.token;
+                    let token = hyp.decoder_state.token;
                     if last_token != token && token != blank_id {
                         output.tokens.push(token);
                         output.timesteps.push(step);
-                        output.am_scores.push(hyp.am_score);
-                        output.lm_scores.push(hyp.lm_score);
+                        output.am_scores.push(hyp.decoder_state.am_score);
+                        output.lm_scores.push(hyp.decoder_state.lm_score);
                     }
                     last_token = token;
                 }
@@ -317,16 +347,20 @@ impl<T: LM> BeamSearchDecoder<T> {
 }
 
 fn add_candidate<T>(
-    output: &mut Vec<DecoderState<T>>,
+    output: &mut Vec<DecoderBeam<T>>,
     current_best_score: &mut f32,
     beam_threshold: f32,
-    state: DecoderState<T>,
+    parent_lm_state: Rc<T>,
+    state: DecoderState,
 ) {
     if state.score > *current_best_score {
         *current_best_score = state.score;
     }
     if state.score > *current_best_score - beam_threshold {
-        output.push(state);
+        output.push(DecoderBeam {
+            parent_lm_state,
+            state,
+        });
     }
 }
 

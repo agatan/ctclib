@@ -8,4 +8,4 @@ pub use decoder::{
 pub use dict::Dict;
 #[cfg(feature = "kenlm")]
 pub use lm::kenlm::KenLM;
-pub use lm::{LMStateRef, ZeroLM, LM};
+pub use lm::{SequenceStateRef, ZeroLM, LM};
